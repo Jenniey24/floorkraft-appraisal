@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Performance & Appraisal System — Login</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="center-wrap">
+  <div class="card">
+    <h2 style="text-align:center;margin-bottom:2px;">Performance &amp; Appraisal System</h2>
+    <p class="muted" style="text-align:center;margin-top:0;" id="companyName">Loading…</p>
+
+    <div id="demoBanner" class="note hidden">
+      Demo mode — no backend connected yet. Data is stored only in this browser so you can preview the system.
+      Try Staff ID <b>EMP001</b> / PIN <b>1111</b>, or HR ID <b>HR001</b> / PIN <b>9999</b> (HR console PIN: <b>2580</b>).
+      <div style="margin-top:8px;"><button class="btn secondary small" onclick="Api.resetDemo()">Reset demo data</button></div>
+    </div>
+
+    <div class="tabs" style="justify-content:center;">
+      <button id="tabStaff" class="active" onclick="switchTab('staff')">Staff Login</button>
+      <button id="tabHr" onclick="switchTab('hr')">HR Login</button>
+    </div>
+
+    <div id="staffPane">
+      <label>Staff ID</label>
+      <input id="staffId" placeholder="e.g. EMP001">
+      <label>PIN</label>
+      <input id="staffPin" type="password" placeholder="4-digit PIN">
+      <button class="btn" style="width:100%;margin-top:16px;" onclick="staffLogin()">Log in to Staff Console</button>
+      <div class="error" id="staffErr"></div>
+    </div>
+
+    <div id="hrPane" class="hidden">
+      <label>HR Staff ID</label>
+      <input id="hrStaffId" placeholder="e.g. HR001">
+      <label>PIN</label>
+      <input id="hrPin1" type="password" placeholder="Your staff PIN">
+      <label>HR Console Access PIN</label>
+      <input id="hrPin2" type="password" placeholder="Separate HR console PIN">
+      <p class="muted small">This second PIN is required to enter the HR console, even for HR-role accounts, so the console can't be opened from a shared or staff device.</p>
+      <button class="btn gold" style="width:100%;margin-top:8px;" onclick="hrLogin()">Log in to HR Console</button>
+      <div class="error" id="hrErr"></div>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+function switchTab(t) {
+  document.getElementById('tabStaff').classList.toggle('active', t==='staff');
+  document.getElementById('tabHr').classList.toggle('active', t==='hr');
+  document.getElementById('staffPane').classList.toggle('hidden', t!=='staff');
+  document.getElementById('hrPane').classList.toggle('hidden', t!=='hr');
+}
+
+async function init() {
+  document.getElementById('demoBanner').classList.toggle('hidden', !DEMO_MODE);
+  const cfg = await Api.get('config');
+  document.getElementById('companyName').innerText = (cfg && cfg.COMPANY_NAME) ? cfg.COMPANY_NAME + ' Portal' : 'Staff Portal';
+}
+init();
+
+async function staffLogin() {
+  const staffId = document.getElementById('staffId').value.trim();
+  const pin = document.getElementById('staffPin').value.trim();
+  const errEl = document.getElementById('staffErr');
+  errEl.innerText = '';
+  if (!staffId || !pin) { errEl.innerText = 'Enter your Staff ID and PIN.'; return; }
+  const res = await Api.get('login', { staffId, pin });
+  if (res.error) { errEl.innerText = res.error; return; }
+  sessionStorage.setItem('currentStaff', JSON.stringify(res.staff));
+  if (res.staff.Role === 'HR') {
+    window.location.href = 'staff.html'; // HR users can also view their own staff console
+  } else {
+    window.location.href = 'staff.html';
+  }
+}
+
+async function hrLogin() {
+  const staffId = document.getElementById('hrStaffId').value.trim();
+  const pin1 = document.getElementById('hrPin1').value.trim();
+  const pin2 = document.getElementById('hrPin2').value.trim();
+  const errEl = document.getElementById('hrErr');
+  errEl.innerText = '';
+  if (!staffId || !pin1 || !pin2) { errEl.innerText = 'Fill in all three fields.'; return; }
+  const res = await Api.get('login', { staffId, pin: pin1 });
+  if (res.error) { errEl.innerText = res.error; return; }
+  if (res.staff.Role !== 'HR') { errEl.innerText = 'This account does not have HR access.'; return; }
+  const pinCheck = await Api.get('hrPinCheck', { pin: pin2 });
+  if (!pinCheck.ok) { errEl.innerText = 'Incorrect HR console PIN.'; return; }
+  sessionStorage.setItem('currentStaff', JSON.stringify(res.staff));
+  sessionStorage.setItem('hrUnlocked', 'true');
+  window.location.href = 'hr.html';
+}
+</script>
+</body>
+</html>

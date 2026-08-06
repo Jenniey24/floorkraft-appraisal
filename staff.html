@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Console — Performance & Appraisal</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Staff <span>Console</span></div>
+  <div class="flex">
+    <span class="who" id="whoName"></span>
+    <a class="logout" onclick="logout()">Log out</a>
+  </div>
+</header>
+<div class="wrap">
+  <div id="demoNote" class="note hidden">Demo mode — actions are simulated in this browser only. No real emails are sent.</div>
+
+  <div class="tabs">
+    <button class="active" data-tab="monthly" onclick="showTab('monthly')">Monthly Appraisal</button>
+    <button data-tab="pip" onclick="showTab('pip')" id="tabPipBtn">PIP Weekly Review</button>
+    <button data-tab="probation" onclick="showTab('probation')" id="tabProbationBtn">Probation Review</button>
+    <button data-tab="history" onclick="showTab('history')">My History</button>
+    <button data-tab="suggest" onclick="showTab('suggest')">Suggestion Box</button>
+  </div>
+
+  <!-- MONTHLY -->
+  <div id="pane-monthly" class="pane">
+    <div class="card">
+      <h2>Monthly Appraisal</h2>
+      <div class="grid cols-2">
+        <div><label>Month</label><select id="mMonth"></select></div>
+        <div><label>Year</label><input id="mYear" type="number"></div>
+      </div>
+      <table style="margin-top:14px;">
+        <thead><tr>
+          <th>#</th><th>Objective</th><th>Key Result (SMART KPI)</th><th>Unit</th><th>Weight %</th><th>Target</th><th>Actual</th><th>Achv %</th><th></th>
+        </tr></thead>
+        <tbody id="mRows"></tbody>
+      </table>
+      <button class="btn secondary small" style="margin-top:8px;" onclick="addObjRow('mRows')">+ Add objective</button>
+      <div class="right muted" style="margin-top:6px;">Overall score auto-calculates on submit: <b id="mScorePreview">—</b></div>
+      <label style="margin-top:16px;">Employee Report — What Was Achieved This Month</label>
+      <textarea id="mReport" placeholder="Summarize what you achieved this month..."></textarea>
+      <button class="btn" style="margin-top:14px;" onclick="submitMonthly()">Submit for HR Review</button>
+      <div class="error" id="mErr"></div>
+    </div>
+  </div>
+
+  <!-- PIP -->
+  <div id="pane-pip" class="pane hidden">
+    <div class="card" id="pipCard"></div>
+  </div>
+
+  <!-- PROBATION -->
+  <div id="pane-probation" class="pane hidden">
+    <div class="card" id="probationCard"></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="pane-history" class="pane hidden">
+    <div class="card"><h2>My Appraisal History</h2><div id="historyList"></div></div>
+  </div>
+
+  <!-- SUGGESTIONS -->
+  <div id="pane-suggest" class="pane hidden">
+    <div class="card">
+      <h2>Suggestion Box</h2>
+      <p class="muted">Tell HR what would help you (or the team) perform better — training, tools, process changes, anything.</p>
+      <label>Category</label>
+      <select id="sugCategory">
+        <option>General</option><option>Training</option><option>Tools/Equipment</option>
+        <option>Process</option><option>Management</option><option>Wellbeing</option>
+      </select>
+      <label>Your suggestion</label>
+      <textarea id="sugText"></textarea>
+      <label class="flex"><input type="checkbox" id="sugAnon" style="width:auto;"> Submit anonymously</label>
+      <button class="btn" style="margin-top:10px;" onclick="submitSuggestion()">Submit Suggestion</button>
+      <div class="error" id="sugErr"></div>
+      <div id="sugOk" class="muted hidden" style="color:var(--good);margin-top:8px;">Thank you — your suggestion has been sent to HR.</div>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+let CURRENT = JSON.parse(sessionStorage.getItem('currentStaff') || 'null');
+if (!CURRENT) window.location.href = 'index.html';
+document.getElementById('whoName').innerText = CURRENT.Name + ' · ' + CURRENT.StaffID;
+document.getElementById('demoNote').classList.toggle('hidden', !DEMO_MODE);
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+function fillMonthSelect(id, def) {
+  const sel = document.getElementById(id); sel.innerHTML = '';
+  MONTHS.forEach(m => { const o=document.createElement('option'); o.value=m; o.text=m; if(m===def) o.selected=true; sel.appendChild(o); });
+}
+const now = new Date();
+fillMonthSelect('mMonth', MONTHS[now.getMonth()]);
+document.getElementById('mYear').value = now.getFullYear();
+
+function logout() { sessionStorage.clear(); window.location.href = 'index.html'; }
+
+function showTab(name) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.add('hidden'));
+  document.getElementById('pane-'+name).classList.remove('hidden');
+  if (name==='history') renderHistory();
+}
+
+function objRowHtml(idPrefix, kpi) {
+  return `<tr>
+    <td><input class="cell obj" value="${esc(kpi?kpi.Objective||kpi.objective||'':'')}"></td>
+    <td><input class="cell kr" value="${esc(kpi?kpi.KeyResult||kpi.keyResult||'':'')}"></td>
+    <td><input class="cell unit" style="width:60px" value="${esc(kpi?kpi.Unit||kpi.unit||'':'')}"></td>
+    <td><input class="cell weight" type="number" style="width:60px" value="${kpi?kpi.DefaultWeight||kpi.weight||'':''}"></td>
+    <td><input class="cell target" type="number" style="width:80px"></td>
+    <td><input class="cell actual" type="number" style="width:80px"></td>
+    <td class="cell achv muted">—</td>
+    <td><button class="btn secondary small" onclick="this.closest('tr').remove()">✕</button></td>
+  </tr>`;
+}
+function esc(s){ return String(s||'').replace(/"/g,'&quot;'); }
+
+function addObjRow(tbodyId, kpi) {
+  document.getElementById(tbodyId).insertAdjacentHTML('beforeend', objRowHtml(tbodyId, kpi));
+}
+
+async function loadKpiDefaults() {
+  const templates = await Api.get('kpiTemplates', { department: CURRENT.Department });
+  if (templates && templates.length) templates.forEach(k => addObjRow('mRows', k));
+  else addObjRow('mRows');
+}
+loadKpiDefaults();
+
+function readObjectives(tbodyId) {
+  const rows = document.querySelectorAll('#'+tbodyId+' tr');
+  return Array.from(rows).map(r => ({
+    objective: r.querySelector('.obj').value,
+    keyResult: r.querySelector('.kr').value,
+    unit: r.querySelector('.unit').value,
+    weight: r.querySelector('.weight').value,
+    target: r.querySelector('.target').value,
+    actual: r.querySelector('.actual').value
+  })).filter(o => o.objective);
+}
+
+async function submitMonthly() {
+  const objectives = readObjectives('mRows');
+  const errEl = document.getElementById('mErr'); errEl.innerText='';
+  if (!objectives.length) { errEl.innerText = 'Add at least one objective.'; return; }
+  const totalWeight = objectives.reduce((s,o)=>s+(parseFloat(o.weight)||0),0);
+  if (Math.round(totalWeight) !== 100) { errEl.innerText = `Weights should total 100% (currently ${totalWeight}%). You can still submit if this is intentional.`; }
+  const res = await Api.post('submitMonthly', {
+    staffId: CURRENT.StaffID, month: document.getElementById('mMonth').value, year: document.getElementById('mYear').value,
+    objectives, employeeReport: document.getElementById('mReport').value
+  });
+  if (res.error) { errEl.innerText = res.error; return; }
+  document.getElementById('mScorePreview').innerText = res.overallScore + '%';
+  alert('Submitted! Overall score: ' + res.overallScore + '%. HR will review and you\'ll get an email with the result.' + (res.demoNote?(' ('+res.demoNote+')'):''));
+}
+
+/* ---------------- PIP & PROBATION PANES ---------------- */
+async function loadStatusPanes() {
+  const dash = await Api.get('staffDashboard', { staffId: CURRENT.StaffID });
+  document.getElementById('tabPipBtn').classList.toggle('hidden', !dash.pip);
+  document.getElementById('tabProbationBtn').classList.toggle('hidden', !dash.probation);
+  window.DASH = dash;
+  if (dash.pip) renderPip(dash);
+  if (dash.probation) renderProbation(dash);
+}
+loadStatusPanes();
+
+function weekEndingOptions() {
+  // last 8 Fridays
+  const opts = [];
+  let d = new Date();
+  d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7)); // next/this Friday
+  for (let i=0;i<8;i++) {
+    opts.push(new Date(d).toISOString().slice(0,10));
+    d.setDate(d.getDate()-7);
+  }
+  return opts;
+}
+
+function renderPip(dash) {
+  const p = dash.pip;
+  const badge = p.Status === 'Extended' ? '<span class="badge pip">Extended</span>' : '<span class="badge pip">Active PIP</span>';
+  let html = `<h2>Performance Improvement Plan ${badge}</h2>
+    <p class="muted">Started ${fmtDate(p.StartDate)} · Ends ${fmtDate(p.EndDate)}${p.Reason?(' · Reason: '+esc(p.Reason)):''}</p>
+    <p class="muted">${esc(p.Notes||'')}</p><hr class="sep">
+    <h3>Submit This Week's Review</h3>
+    <label>Week Ending (Friday)</label>
+    <select id="pipWeek">${weekEndingOptions().map(d=>`<option value="${d}">${d}</option>`).join('')}</select>
+    <table style="margin-top:10px;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Weight %</th><th>Target</th><th>Actual</th><th></th></tr></thead>
+    <tbody id="pipRows"></tbody></table>
+    <button class="btn secondary small" style="margin-top:8px;" onclick="addObjRow('pipRows')">+ Add objective</button>
+    <label style="margin-top:14px;">What did you achieve this week?</label>
+    <textarea id="pipReport"></textarea>
+    <button class="btn" style="margin-top:12px;" onclick="submitPip()">Submit Weekly Review</button>
+    <div class="error" id="pipErr"></div>
+    <hr class="sep"><h3>Previous Weeks</h3>
+    <div id="pipHistory"></div>`;
+  document.getElementById('pipCard').innerHTML = html;
+  const templates = dash.kpiTemplates || [];
+  if (templates.length) templates.forEach(k => addObjRow('pipRows', k)); else addObjRow('pipRows');
+
+  const hist = document.getElementById('pipHistory');
+  if (!dash.pipEntries.length) hist.innerHTML = '<p class="muted">No entries yet.</p>';
+  else hist.innerHTML = dash.pipEntries.sort((a,b)=>b.WeekEnding.localeCompare(a.WeekEnding)).map(e => entryCardHtml('Week ending '+e.WeekEnding, e)).join('');
+}
+
+function renderProbation(dash) {
+  const p = dash.probation;
+  let html = `<h2>Probation Review <span class="badge probation">Probation</span></h2>
+    <p class="muted">Started ${fmtDate(p.StartDate)} · Original end ${fmtDate(p.OriginalEndDate)}${p.ExtendedEndDate?(' · Extended to '+fmtDate(p.ExtendedEndDate)):''}</p>
+    <p class="muted">${esc(p.Notes||'')}</p><hr class="sep">
+    <h3>Submit This Month's Review</h3>
+    <div class="grid cols-2"><div><label>Month</label><select id="probMonth"></select></div><div><label>Year</label><input id="probYear" type="number" value="${now.getFullYear()}"></div></div>
+    <table style="margin-top:10px;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Weight %</th><th>Target</th><th>Actual</th><th></th></tr></thead>
+    <tbody id="probRows"></tbody></table>
+    <button class="btn secondary small" style="margin-top:8px;" onclick="addObjRow('probRows')">+ Add objective</button>
+    <label style="margin-top:14px;">What did you achieve this month?</label>
+    <textarea id="probReport"></textarea>
+    <button class="btn" style="margin-top:12px;" onclick="submitProbation()">Submit Monthly Review</button>
+    <div class="error" id="probErr"></div>
+    <hr class="sep"><h3>Previous Months</h3>
+    <div id="probHistory"></div>`;
+  document.getElementById('probationCard').innerHTML = html;
+  fillMonthSelect('probMonth', MONTHS[now.getMonth()]);
+  const templates = dash.kpiTemplates || [];
+  if (templates.length) templates.forEach(k => addObjRow('probRows', k)); else addObjRow('probRows');
+
+  const hist = document.getElementById('probHistory');
+  if (!dash.probationEntries.length) hist.innerHTML = '<p class="muted">No entries yet.</p>';
+  else hist.innerHTML = dash.probationEntries.map(e => entryCardHtml(e.Month+' '+e.Year, e)).join('');
+}
+
+function entryCardHtml(title, e) {
+  const statusClass = (e.Status||'').toLowerCase();
+  return `<div class="card" style="background:#fafbfd;">
+    <div class="flex between"><h3 style="margin:0;">${esc(title)}</h3><span class="badge ${statusClass}">${e.Status}</span></div>
+    <p class="small muted">Score: <b>${e.OverallScore}%</b></p>
+    <p class="small">${esc(e.EmployeeReport||'')}</p>
+    ${e.ManagerComments? `<p class="small"><b>HR Comments:</b> ${esc(e.ManagerComments)}</p>`:''}
+    ${e.ImprovementPlan? `<p class="small"><b>Improvement Plan:</b> ${esc(e.ImprovementPlan)}</p>`:''}
+  </div>`;
+}
+
+async function submitPip() {
+  const objectives = readObjectives('pipRows');
+  const errEl = document.getElementById('pipErr'); errEl.innerText='';
+  if (!objectives.length) { errEl.innerText='Add at least one objective.'; return; }
+  const res = await Api.post('submitPipEntry', {
+    pipId: window.DASH.pip.PIPID, staffId: CURRENT.StaffID, weekEnding: document.getElementById('pipWeek').value,
+    objectives, employeeReport: document.getElementById('pipReport').value
+  });
+  if (res.error) { errEl.innerText = res.error; return; }
+  alert('Weekly PIP review submitted. Score: ' + res.overallScore + '%.');
+  loadStatusPanes();
+}
+
+async function submitProbation() {
+  const objectives = readObjectives('probRows');
+  const errEl = document.getElementById('probErr'); errEl.innerText='';
+  if (!objectives.length) { errEl.innerText='Add at least one objective.'; return; }
+  const res = await Api.post('submitProbationEntry', {
+    probationId: window.DASH.probation.ProbationID, staffId: CURRENT.StaffID,
+    month: document.getElementById('probMonth').value, year: document.getElementById('probYear').value,
+    objectives, employeeReport: document.getElementById('probReport').value
+  });
+  if (res.error) { errEl.innerText = res.error; return; }
+  alert('Monthly probation review submitted. Score: ' + res.overallScore + '%.');
+  loadStatusPanes();
+}
+
+/* ---------------- HISTORY ---------------- */
+async function renderHistory() {
+  const dash = window.DASH || await Api.get('staffDashboard', { staffId: CURRENT.StaffID });
+  const list = document.getElementById('historyList');
+  if (!dash.monthly.length) { list.innerHTML = '<p class="muted">No submissions yet.</p>'; return; }
+  list.innerHTML = dash.monthly.sort((a,b)=>b.SubmittedDate.localeCompare(a.SubmittedDate)).map(m => entryCardHtml(m.Month+' '+m.Year, m)).join('');
+}
+
+/* ---------------- SUGGESTIONS ---------------- */
+async function submitSuggestion() {
+  const text = document.getElementById('sugText').value.trim();
+  const errEl = document.getElementById('sugErr'); errEl.innerText='';
+  if (!text) { errEl.innerText = 'Write your suggestion first.'; return; }
+  await Api.post('addSuggestion', {
+    staffId: CURRENT.StaffID, staffName: CURRENT.Name, text,
+    category: document.getElementById('sugCategory').value, anonymous: document.getElementById('sugAnon').checked
+  });
+  document.getElementById('sugText').value = '';
+  document.getElementById('sugOk').classList.remove('hidden');
+}
+
+function fmtDate(d) { if(!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString(); }
+</script>
+</body>
+</html>
