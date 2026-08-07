@@ -20,7 +20,7 @@
   <div class="tabs">
     <button class="active" data-tab="inbox" onclick="showTab('inbox')">Review Inbox</button>
     <button data-tab="staff" onclick="showTab('staff')">Staff</button>
-    <button data-tab="kpi" onclick="showTab('kpi')">KPI Library</button>
+    <button data-tab="setobjectives" onclick="showTab('setobjectives')">Set Objectives</button>
     <button data-tab="probation" onclick="showTab('probation')">Probation</button>
     <button data-tab="pip" onclick="showTab('pip')">PIP</button>
     <button data-tab="yearly" onclick="showTab('yearly')">Yearly Appraisal</button>
@@ -30,9 +30,7 @@
 
   <!-- INBOX -->
   <div id="pane-inbox" class="pane">
-    <div class="card"><h2>Monthly Appraisals Awaiting Review</h2><div id="inboxMonthly"></div></div>
-    <div class="card"><h2>Probation Reviews Awaiting Comment</h2><div id="inboxProbation"></div></div>
-    <div class="card"><h2>PIP Weekly Reviews Awaiting Comment</h2><div id="inboxPip"></div></div>
+    <div class="card"><h2>Submissions Awaiting Your Review</h2><div id="inboxList"></div></div>
   </div>
 
   <!-- STAFF -->
@@ -50,37 +48,46 @@
         <div><label>Manager Email</label><input id="nMgr"></div>
         <div><label>Starting Status</label><select id="nStatus"><option>Active</option><option>Probation</option></select></div>
       </div>
-      <button class="btn" style="margin-top:12px;" onclick="addStaff()">Add Staff (sends portal access email)</button>
+      <p class="muted small">Choose "Probation" here only for a brand-new hire starting straight on probation (default 3 months). PIP is never a starting status — it's started later from the PIP tab for an existing staff member.</p>
+      <button class="btn" style="margin-top:8px;" onclick="addStaff()">Add Staff (sends portal access email)</button>
       <div class="error" id="staffErr"></div>
     </div>
-    <div class="card"><h2>All Staff</h2><table><thead><tr><th>ID</th><th>Name</th><th>Dept</th><th>Role</th><th>Status</th><th>Email</th></tr></thead><tbody id="staffTable"></tbody></table></div>
+    <div class="card">
+      <h2>All Staff</h2>
+      <table><thead><tr><th>ID</th><th>Name</th><th>Dept</th><th>Role</th><th>Status</th><th>Email</th><th></th></tr></thead><tbody id="staffTable"></tbody></table>
+    </div>
+    <div class="card hidden" id="editStaffCard"></div>
   </div>
 
-  <!-- KPI LIBRARY -->
-  <div id="pane-kpi" class="pane hidden">
+  <!-- SET OBJECTIVES -->
+  <div id="pane-setobjectives" class="pane hidden">
     <div class="card">
-      <h2>Add KPI / Objective Template</h2>
-      <p class="muted">These pre-fill staff appraisal forms by department. Use "All" to apply to every department.</p>
+      <h2>Build Objectives for a Staff Member's Next Period</h2>
+      <p class="muted">Pick who this is for. Their current track (Active / Probation / PIP) determines the period type automatically. You can add as many objective rows as needed — 10+ is fine.</p>
       <div class="grid cols-3">
-        <div><label>Department</label><input id="kDept" placeholder="Sales / All..."></div>
-        <div><label>Objective</label><input id="kObj"></div>
-        <div><label>Key Result (SMART KPI)</label><input id="kKr"></div>
-        <div><label>Unit</label><input id="kUnit" placeholder="₦ / % / Count"></div>
-        <div><label>Default Weight %</label><input id="kWeight" type="number"></div>
+        <div><label>Staff</label><select id="soStaff" onchange="onSoStaffChange()"></select></div>
+        <div><label>Period Label</label><input id="soPeriod" placeholder="e.g. July 2026 / Probation Month 2 / Week ending 2026-08-08"></div>
+        <div id="soTrackInfo" class="muted small" style="align-self:end;"></div>
       </div>
-      <button class="btn" style="margin-top:12px;" onclick="addKpi()">Add to Library</button>
+      <table style="margin-top:12px;">
+        <thead><tr><th>Objective</th><th>Key Result (SMART KPI)</th><th>Unit</th><th>Weight %</th><th>Target</th><th></th></tr></thead>
+        <tbody id="soRows"></tbody>
+      </table>
+      <button class="btn secondary small" style="margin-top:8px;" onclick="addSoRow()">+ Add objective row</button>
+      <div class="right muted small" id="soWeightTotal" style="margin-top:6px;">Total weight: 0%</div>
+      <button class="btn" style="margin-top:14px;" onclick="createEntryForStaff()">Send Objectives to Staff</button>
+      <div class="error" id="soErr"></div>
     </div>
-    <div class="card"><h2>KPI Library</h2><table><thead><tr><th>Dept</th><th>Objective</th><th>Key Result</th><th>Unit</th><th>Weight</th></tr></thead><tbody id="kpiTable"></tbody></table></div>
   </div>
 
   <!-- PROBATION -->
   <div id="pane-probation" class="pane hidden">
     <div class="card">
-      <h2>Put Staff on Probation</h2>
+      <h2>Put a Staff Member on Probation</h2>
       <div class="grid cols-3">
         <div><label>Staff</label><select id="pStaff"></select></div>
         <div><label>Start Date</label><input id="pStart" type="date"></div>
-        <div><label>Original End Date</label><input id="pEnd" type="date"></div>
+        <div><label>Duration (months)</label><input id="pDuration" type="number" value="3"></div>
       </div>
       <label>Notes</label><textarea id="pNotes"></textarea>
       <button class="btn" style="margin-top:10px;" onclick="addProbationRec()">Start Probation</button>
@@ -91,7 +98,7 @@
   <!-- PIP -->
   <div id="pane-pip" class="pane hidden">
     <div class="card">
-      <h2>Put Staff on PIP</h2>
+      <h2>Put a Staff Member on PIP</h2>
       <div class="grid cols-3">
         <div><label>Staff</label><select id="ppStaff"></select></div>
         <div><label>Start Date</label><input id="ppStart" type="date"></div>
@@ -100,19 +107,19 @@
       <label>Reason</label><textarea id="ppReason" placeholder="Why is this staff member being placed on PIP?"></textarea>
       <button class="btn" style="margin-top:10px;" onclick="addPipRec()">Start PIP</button>
     </div>
-    <div class="card"><h2>Active / Past PIPs</h2><p class="muted">You can extend a PIP, mark it Passed/Failed, add notes, and correct a staff member's previously submitted weekly entry (e.g. last month's numbers) below.</p><div id="pipList"></div></div>
+    <div class="card"><h2>Active / Past PIPs</h2><div id="pipList"></div></div>
   </div>
 
   <!-- YEARLY -->
   <div id="pane-yearly" class="pane hidden">
     <div class="card">
       <h2>Yearly Appraisal</h2>
-      <p class="muted">Staff not currently on Probation or PIP are eligible for yearly recognition. Enter their annual figures/summary and mark eligibility.</p>
+      <p class="muted">Staff not currently on Probation or PIP are eligible for yearly recognition.</p>
       <div class="grid cols-3">
         <div><label>Staff</label><select id="yStaff"></select></div>
         <div><label>Year</label><input id="yYear" type="number"></div>
         <div><label>Department</label><input id="yDept"></div>
-        <div><label>Annual Sales / KPI Total</label><input id="ySales" placeholder="e.g. sales total, if applicable"></div>
+        <div><label>Annual Sales / KPI Total</label><input id="ySales"></div>
         <div><label>Overall Score %</label><input id="yScore" type="number"></div>
         <div><label>Eligible for Best Performer</label><select id="yEligible"><option value="true">Yes</option><option value="false">No</option></select></div>
       </div>
@@ -121,10 +128,7 @@
     </div>
     <div class="card">
       <h2>Declare Best Performer of the Year</h2>
-      <div class="flex">
-        <input id="bpYear" type="number" style="max-width:140px;">
-        <button class="btn gold" onclick="declareBest()">Compute &amp; Announce (per department)</button>
-      </div>
+      <div class="flex"><input id="bpYear" type="number" style="max-width:140px;"><button class="btn gold" onclick="declareBest()">Compute &amp; Announce (per department)</button></div>
       <div id="bpResult" style="margin-top:12px;"></div>
     </div>
     <div class="card"><h2>Yearly Records</h2><table><thead><tr><th>Staff</th><th>Year</th><th>Dept</th><th>Score</th><th>Eligible</th></tr></thead><tbody id="yearlyTable"></tbody></table></div>
@@ -139,13 +143,12 @@
   <div id="pane-settings" class="pane hidden">
     <div class="card">
       <h2>System Settings</h2>
-      <p class="muted small">In demo mode these save to your browser only. In the live system these are stored in the Config tab of the Google Sheet.</p>
       <label>Company Name</label><input id="cfgCompany">
-      <label>HR Notify Email (receives all submission alerts &amp; reminder summaries)</label><input id="cfgHrEmail">
-      <label>Monthly Reminder Day (day of month staff get reminded to submit)</label><input id="cfgReminderDay" type="number">
+      <label>HR Notify Email</label><input id="cfgHrEmail">
+      <label>Monthly Reminder Day</label><input id="cfgReminderDay" type="number">
       <button class="btn" style="margin-top:10px;" onclick="saveSettings()">Save Settings</button>
       <hr class="sep">
-      <p class="muted small">To change the HR Console PIN, edit the <b>Config</b> tab directly in the Google Sheet (key: HR_CONSOLE_PIN) — this is kept out of the app UI intentionally for security.</p>
+      <p class="muted small">To change the HR Console PIN, edit the <b>Config</b> tab directly in the Google Sheet (key: HR_CONSOLE_PIN).</p>
     </div>
   </div>
 </div>
@@ -154,13 +157,10 @@
 <script src="api.js"></script>
 <script>
 let CURRENT = JSON.parse(sessionStorage.getItem('currentStaff') || 'null');
-if (!CURRENT || CURRENT.Role !== 'HR' || sessionStorage.getItem('hrUnlocked') !== 'true') {
-  window.location.href = 'index.html';
-}
+if (!CURRENT || CURRENT.Role !== 'HR' || sessionStorage.getItem('hrUnlocked') !== 'true') window.location.href = 'index.html';
 document.getElementById('whoName').innerText = CURRENT.Name + ' · ' + CURRENT.StaffID;
 document.getElementById('demoNote').classList.toggle('hidden', !DEMO_MODE);
 function logout() { sessionStorage.clear(); window.location.href = 'index.html'; }
-
 function showTab(name) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
   document.querySelectorAll('.pane').forEach(p => p.classList.add('hidden'));
@@ -168,11 +168,14 @@ function showTab(name) {
 }
 function esc(s){ return String(s||'').replace(/"/g,'&quot;'); }
 function fmtDate(d) { if(!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString(); }
+function val(id){ const el=document.getElementById(id); return el.value.trim ? el.value.trim() : el.value; }
+function statusClass(s) { s=(s||'').toLowerCase(); if(s==='pip') return 'pip'; if(s==='probation') return 'probation'; return 'active'; }
+function scoreClass(s) { s=parseFloat(s); return s>=80?'score-good':s>=60?'score-warn':'score-bad'; }
 
 let OV = null;
 async function refresh() {
   OV = await Api.get('hrOverview');
-  renderStaffTable(); renderStaffSelects(); renderKpiTable(); renderInbox();
+  renderStaffTable(); renderStaffSelects(); renderInbox();
   renderProbationList(); renderPipList(); renderYearlyTable(); renderSuggestions();
   document.getElementById('cfgCompany').value = OV.config.COMPANY_NAME||'';
   document.getElementById('cfgHrEmail').value = OV.config.HR_NOTIFY_EMAIL||'';
@@ -185,15 +188,14 @@ function renderStaffTable() {
   document.getElementById('staffTable').innerHTML = OV.staff.map(s => `<tr>
     <td>${s.StaffID}</td><td>${esc(s.Name)}</td><td>${esc(s.Department)}</td><td>${s.Role}</td>
     <td><span class="badge ${statusClass(s.Status)}">${s.Status}</span></td><td>${esc(s.Email)}</td>
+    <td><button class="btn secondary small" onclick="openEditStaff('${s.StaffID}')">Edit</button></td>
   </tr>`).join('');
 }
-function statusClass(s) { s=(s||'').toLowerCase(); if(s==='pip') return 'pip'; if(s==='probation') return 'probation'; return 'active'; }
-
 function renderStaffSelects() {
   const opts = OV.staff.filter(s=>s.Role==='Staff').map(s => `<option value="${s.StaffID}">${esc(s.Name)} (${s.StaffID}) — ${s.Status}</option>`).join('');
-  ['pStaff','ppStaff','yStaff'].forEach(id => document.getElementById(id).innerHTML = opts);
+  ['pStaff','ppStaff','yStaff','soStaff'].forEach(id => document.getElementById(id).innerHTML = opts);
+  if (document.getElementById('soStaff').value) onSoStaffChange();
 }
-
 async function addStaff() {
   const errEl = document.getElementById('staffErr'); errEl.innerText = '';
   const body = { name: val('nName'), email: val('nEmail'), department: val('nDept'), jobTitle: val('nTitle'),
@@ -205,170 +207,250 @@ async function addStaff() {
   ['nName','nEmail','nDept','nTitle','nPin','nJoin','nMgr'].forEach(id=>document.getElementById(id).value='');
   refresh();
 }
-function val(id){ return document.getElementById(id).value.trim ? document.getElementById(id).value.trim() : document.getElementById(id).value; }
-
-/* ---------------- KPI ---------------- */
-function renderKpiTable() {
-  document.getElementById('kpiTable').innerHTML = OV.kpiTemplates.map(k => `<tr><td>${esc(k.Department)}</td><td>${esc(k.Objective)}</td><td>${esc(k.KeyResult)}</td><td>${esc(k.Unit)}</td><td>${k.DefaultWeight}%</td></tr>`).join('');
+function openEditStaff(staffId) {
+  const s = OV.staff.find(x=>x.StaffID===staffId);
+  const card = document.getElementById('editStaffCard');
+  card.classList.remove('hidden');
+  card.innerHTML = `<h2>Edit ${esc(s.Name)}</h2>
+    <div class="grid cols-3">
+      <div><label>Full Name</label><input id="eName" value="${esc(s.Name)}"></div>
+      <div><label>Email</label><input id="eEmail" value="${esc(s.Email)}"></div>
+      <div><label>Department</label><input id="eDept" value="${esc(s.Department)}"></div>
+      <div><label>Job Title</label><input id="eTitle" value="${esc(s.JobTitle)}"></div>
+      <div><label>Manager Email</label><input id="eMgr" value="${esc(s.ManagerEmail)}"></div>
+      <div><label>Active</label><select id="eActive"><option value="true" ${s.Active!==false?'selected':''}>Yes</option><option value="false" ${s.Active===false?'selected':''}>No</option></select></div>
+    </div>
+    <div class="flex" style="margin-top:10px;">
+      <button class="btn" onclick="saveEditStaff('${staffId}')">Save Changes</button>
+      <button class="btn secondary" onclick="document.getElementById('editStaffCard').classList.add('hidden')">Cancel</button>
+    </div>`;
+  card.scrollIntoView({behavior:'smooth'});
 }
-async function addKpi() {
-  await Api.post('addKpiTemplate', { department: val('kDept'), objective: val('kObj'), keyResult: val('kKr'), unit: val('kUnit'), weight: val('kWeight') });
-  ['kDept','kObj','kKr','kUnit','kWeight'].forEach(id=>document.getElementById(id).value='');
+async function saveEditStaff(staffId) {
+  const patch = { Name: val('eName'), Email: val('eEmail'), Department: val('eDept'), JobTitle: val('eTitle'), ManagerEmail: val('eMgr'), Active: val('eActive')==='true' };
+  await Api.post('updateStaff', { staffId, patch });
+  document.getElementById('editStaffCard').classList.add('hidden');
+  alert('Updated.'); refresh();
+}
+
+/* ---------------- SET OBJECTIVES ---------------- */
+function soRowHtml() {
+  return `<tr>
+    <td><input class="cell so-obj"></td>
+    <td><input class="cell so-kr"></td>
+    <td><input class="cell so-unit" style="width:60px"></td>
+    <td><input class="cell so-weight" type="number" style="width:70px" oninput="updateSoWeightTotal()"></td>
+    <td><input class="cell so-target" type="number" style="width:90px"></td>
+    <td><button class="btn secondary small" onclick="this.closest('tr').remove();updateSoWeightTotal()">✕</button></td>
+  </tr>`;
+}
+function addSoRow() { document.getElementById('soRows').insertAdjacentHTML('beforeend', soRowHtml()); }
+function updateSoWeightTotal() {
+  let t=0; document.querySelectorAll('#soRows .so-weight').forEach(i=>t+=parseFloat(i.value)||0);
+  document.getElementById('soWeightTotal').innerText = 'Total weight: ' + t + '%' + (t!==100?' (should total 100%)':'');
+}
+function onSoStaffChange() {
+  const staffId = val('soStaff');
+  const s = OV.staff.find(x=>x.StaffID===staffId);
+  const cycle = OV.cycles.find(c=>c.StaffID===staffId && (c.Status==='Active'||c.Status==='Extended'));
+  const info = document.getElementById('soTrackInfo');
+  if (!s) { info.innerText=''; return; }
+  if (cycle && cycle.Type==='Probation') {
+    info.innerText = `Track: Probation — currently month ${cycle.CurrentPeriod} of ${cycle.DurationMonths}`;
+    document.getElementById('soPeriod').value = `Probation Month ${cycle.CurrentPeriod}`;
+  } else if (cycle && cycle.Type==='PIP') {
+    info.innerText = `Track: PIP — weekly entries`;
+    document.getElementById('soPeriod').value = `Week ending `;
+  } else {
+    info.innerText = `Track: Active — standard monthly appraisal`;
+    const now = new Date();
+    document.getElementById('soPeriod').value = ["January","February","March","April","May","June","July","August","September","October","November","December"][now.getMonth()] + ' ' + now.getFullYear();
+  }
+  document.getElementById('soRows').innerHTML=''; for(let i=0;i<3;i++) addSoRow();
+  updateSoWeightTotal();
+}
+async function createEntryForStaff() {
+  const errEl = document.getElementById('soErr'); errEl.innerText='';
+  const staffId = val('soStaff'); if (!staffId) { errEl.innerText='Select a staff member.'; return; }
+  const cycle = OV.cycles.find(c=>c.StaffID===staffId && (c.Status==='Active'||c.Status==='Extended'));
+  const type = cycle ? cycle.Type : 'Monthly';
+  const rows = Array.from(document.querySelectorAll('#soRows tr')).map(r => ({
+    objective: r.querySelector('.so-obj').value, keyResult: r.querySelector('.so-kr').value,
+    unit: r.querySelector('.so-unit').value, weight: r.querySelector('.so-weight').value, target: r.querySelector('.so-target').value
+  })).filter(o=>o.objective);
+  if (!rows.length) { errEl.innerText = 'Add at least one objective.'; return; }
+  const res = await Api.post('createEntry', { staffId, type, cycleId: cycle?cycle.CycleID:'', periodLabel: val('soPeriod'), objectives: rows });
+  if (res.error) { errEl.innerText = res.error; return; }
+  alert('Objectives sent to staff.' + (res.demoNote?(' ('+res.demoNote+')'):''));
+  document.getElementById('soRows').innerHTML=''; document.getElementById('soPeriod').value='';
   refresh();
 }
 
 /* ---------------- INBOX ---------------- */
-function objectivesTableHtml(objs) {
+function objectivesTableHtml(objs, editable) {
   if (!objs || !objs.length) return '';
-  return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th></tr></thead>
-  <tbody>${objs.map(o=>`<tr><td>${esc(o.objective)}</td><td>${esc(o.keyResult)}</td><td>${esc(o.unit)}</td><td>${o.weight}</td><td>${o.target}</td><td>${o.actual}</td><td><b>${o.achv}%</b></td></tr>`).join('')}</tbody></table>`;
+  return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th><th>Staff Comment</th>${editable?'<th></th>':''}</tr></thead>
+  <tbody>${objs.map(o=>`<tr><td>${esc(o.Objective)}</td><td>${esc(o.KeyResult)}</td><td>${esc(o.Unit)}</td><td>${o.Weight}</td><td>${o.Target}</td><td>${o.Actual}</td><td><b>${o.Achv}%</b></td><td>${esc(o.EmployeeComment)}</td>${editable?`<td><button class="btn secondary small" onclick="deleteObjective('${o.ObjectiveID}')">Delete</button></td>`:''}</tr>`).join('')}</tbody></table>`;
 }
-function scoreClass(s) { s=parseFloat(s); return s>=80?'score-good':s>=60?'score-warn':'score-bad'; }
+async function deleteObjective(objectiveId) {
+  if (!confirm('Delete this KPI row? This cannot be undone.')) return;
+  await Api.post('deleteObjective', { objectiveId });
+  refresh();
+}
 
 function renderInbox() {
   const staffOf = id => (OV.staff.find(s=>s.StaffID===id)||{}).Name || id;
-
-  const pendingMonthly = OV.monthly.filter(m => m.Status === 'Submitted');
-  document.getElementById('inboxMonthly').innerHTML = pendingMonthly.length ? pendingMonthly.map(m => `
-    <div class="card" style="background:#fafbfd;">
-      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(m.StaffID))} — ${m.Month} ${m.Year}</h3><span class="score-pill ${scoreClass(m.OverallScore)}">${m.OverallScore}%</span></div>
-      ${objectivesTableHtml(JSON.parse(m.ObjectivesJSON||'[]'))}
-      <p class="small"><b>Employee report:</b> ${esc(m.EmployeeReport)}</p>
-      <label>Manager Comments</label><textarea id="cmt-${m.AppraisalID}"></textarea>
-      <label>Improvement Plan / Suggestions</label><textarea id="imp-${m.AppraisalID}"></textarea>
+  const pending = OV.entries.filter(e => e.Status === 'Submitted');
+  document.getElementById('inboxList').innerHTML = pending.length ? pending.map(e => {
+    const objs = OV.objectives.filter(o=>o.EntryID===e.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder);
+    return `<div class="card" style="background:#fafbfd;">
+      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(e.StaffID))} — ${esc(e.PeriodLabel)} <span class="badge ${statusClass(e.Type==='Monthly'?'Active':e.Type)}">${e.Type}</span></h3><span class="score-pill ${scoreClass(e.OverallScore)}">${e.OverallScore}%</span></div>
+      ${objectivesTableHtml(objs, false)}
+      <label>HR Comments</label><textarea id="cmt-${e.EntryID}"></textarea>
+      <label>Improvement Plan / Suggestions</label><textarea id="imp-${e.EntryID}"></textarea>
       <div class="flex" style="margin-top:8px;">
-        <button class="btn" onclick="commentMonthly('${m.AppraisalID}')">Send Comments to Staff</button>
-        <button class="btn gold" onclick="signOffMonthly('${m.AppraisalID}')">Sign Off (final)</button>
+        <button class="btn" onclick="commentEntry('${e.EntryID}')">Send Comments to Staff</button>
+        <button class="btn gold" onclick="signOffEntry('${e.EntryID}')">Sign Off (final)</button>
       </div>
-    </div>`).join('') : '<p class="muted">Nothing pending.</p>';
-
-  const pendingProb = OV.probationEntries.filter(e => e.Status === 'Submitted');
-  document.getElementById('inboxProbation').innerHTML = pendingProb.length ? pendingProb.map(e => `
-    <div class="card" style="background:#fafbfd;">
-      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(e.StaffID))} — ${e.Month} ${e.Year}</h3><span class="score-pill ${scoreClass(e.OverallScore)}">${e.OverallScore}%</span></div>
-      ${objectivesTableHtml(JSON.parse(e.ObjectivesJSON||'[]'))}
-      <p class="small"><b>Employee report:</b> ${esc(e.EmployeeReport)}</p>
-      <label>Manager Comments</label><textarea id="pcmt-${e.EntryID}"></textarea>
-      <label>Improvement Plan</label><textarea id="pimp-${e.EntryID}"></textarea>
-      <button class="btn" style="margin-top:8px;" onclick="reviewProbationEntry('${e.EntryID}')">Send Comments to Staff</button>
-    </div>`).join('') : '<p class="muted">Nothing pending.</p>';
-
-  const pendingPip = OV.pipEntries.filter(e => e.Status === 'Submitted');
-  document.getElementById('inboxPip').innerHTML = pendingPip.length ? pendingPip.map(e => `
-    <div class="card" style="background:#fafbfd;">
-      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(e.StaffID))} — week ending ${e.WeekEnding}</h3><span class="score-pill ${scoreClass(e.OverallScore)}">${e.OverallScore}%</span></div>
-      ${objectivesTableHtml(JSON.parse(e.ObjectivesJSON||'[]'))}
-      <p class="small"><b>Employee report:</b> ${esc(e.EmployeeReport)}</p>
-      <label>Manager Comments</label><textarea id="wcmt-${e.EntryID}"></textarea>
-      <label>Improvement Plan</label><textarea id="wimp-${e.EntryID}"></textarea>
-      <button class="btn" style="margin-top:8px;" onclick="reviewPipEntry('${e.EntryID}')">Send Comments to Staff</button>
-    </div>`).join('') : '<p class="muted">Nothing pending.</p>';
+    </div>`;
+  }).join('') : '<p class="muted">Nothing pending.</p>';
 }
-
-async function commentMonthly(id) {
-  await Api.post('hrCommentMonthly', { appraisalId: id, comments: document.getElementById('cmt-'+id).value, improvementPlan: document.getElementById('imp-'+id).value });
+async function commentEntry(id) {
+  await Api.post('hrCommentEntry', { entryId: id, hrComments: document.getElementById('cmt-'+id).value, improvementPlan: document.getElementById('imp-'+id).value });
   alert('Sent to staff.'); refresh();
 }
-async function signOffMonthly(id) {
-  const c = document.getElementById('cmt-'+id).value, i = document.getElementById('imp-'+id).value;
-  if (c || i) await Api.post('hrCommentMonthly', { appraisalId: id, comments: c, improvementPlan: i });
-  await Api.post('hrSignOffMonthly', { appraisalId: id });
-  alert('Signed off — staff notified with final result and improvement plan.'); refresh();
+async function signOffEntry(id) {
+  await Api.post('hrSignOffEntry', { entryId: id, hrComments: document.getElementById('cmt-'+id).value, improvementPlan: document.getElementById('imp-'+id).value });
+  alert('Signed off — staff notified.');
+  refresh();
+  maybeOfferAdvance(id);
 }
-async function reviewProbationEntry(id) {
-  await Api.post('hrReviewProbationEntry', { entryId: id, comments: document.getElementById('pcmt-'+id).value, improvementPlan: document.getElementById('pimp-'+id).value });
-  alert('Sent to staff.'); refresh();
-}
-async function reviewPipEntry(id) {
-  await Api.post('hrReviewPipEntry', { entryId: id, comments: document.getElementById('wcmt-'+id).value, improvementPlan: document.getElementById('wimp-'+id).value });
-  alert('Sent to staff.'); refresh();
+async function maybeOfferAdvance(entryId) {
+  const entry = OV.entries.find(e=>e.EntryID===entryId);
+  if (!entry || entry.Type !== 'Probation') return;
+  const cycle = OV.cycles.find(c=>c.CycleID===entry.CycleID);
+  if (!cycle) return;
+  if (confirm(`This closes out Probation Month ${cycle.CurrentPeriod} for this staff member. Move them to the next month now? (You'll set next month's objectives in "Set Objectives" right after.)`)) {
+    const res = await Api.post('closePeriodAndAdvance', { cycleId: cycle.CycleID });
+    if (res.needsFinalReview) {
+      alert(`This staff member has completed all ${cycle.DurationMonths} probation months. Go to the Probation tab to record a Final Review (Passed / Failed / Extended).`);
+    } else {
+      alert(`Moved to Month ${res.nextPeriod}. Go to "Set Objectives" to send their next month's targets.`);
+    }
+    refresh();
+  }
 }
 
 /* ---------------- PROBATION MGMT ---------------- */
 async function addProbationRec() {
-  await Api.post('addProbation', { staffId: val('pStaff'), startDate: val('pStart'), originalEndDate: val('pEnd'), notes: val('pNotes') });
-  ['pStart','pEnd','pNotes'].forEach(id=>document.getElementById(id).value='');
-  alert('Probation started.'); refresh();
+  await Api.post('startCycle', { staffId: val('pStaff'), type: 'Probation', startDate: val('pStart'), durationMonths: val('pDuration')||3, notes: val('pNotes') });
+  ['pStart','pNotes'].forEach(id=>document.getElementById(id).value=''); document.getElementById('pDuration').value=3;
+  alert('Probation started. Go to "Set Objectives" to send Month 1 targets.'); refresh();
 }
 function renderProbationList() {
   const staffOf = id => (OV.staff.find(s=>s.StaffID===id)||{}).Name || id;
-  document.getElementById('probationList').innerHTML = OV.probation.map(p => {
-    const entries = OV.probationEntries.filter(e=>e.ProbationID===p.ProbationID);
+  const probs = OV.cycles.filter(c=>c.Type==='Probation');
+  document.getElementById('probationList').innerHTML = probs.map(p => {
+    const entries = OV.entries.filter(e=>e.CycleID===p.CycleID);
+    const reviews = OV.finalReviews.filter(f=>f.CycleID===p.CycleID);
+    const needsFinal = p.CurrentPeriod > p.DurationMonths && (p.Status==='Active'||p.Status==='Extended');
     return `<div class="card" style="background:#fafbfd;">
-      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(p.StaffID))}</h3><span class="badge ${statusClass(p.Status)}">${p.Status}</span></div>
-      <p class="small muted">Start ${fmtDate(p.StartDate)} · Original end ${fmtDate(p.OriginalEndDate)} ${p.ExtendedEndDate?('· Extended to '+fmtDate(p.ExtendedEndDate)):''}</p>
+      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(p.StaffID))}</h3><span class="badge ${statusClass(p.Status==='Active'||p.Status==='Extended'?'Probation':p.Status)}">${p.Status}</span></div>
+      <p class="small muted">Start ${fmtDate(p.StartDate)} · Month ${p.CurrentPeriod} of ${p.DurationMonths} · Ends ${fmtDate(p.EndDate)}</p>
       <p class="small">${esc(p.Notes||'')}</p>
+      ${needsFinal? `<div class="note">This staff member has completed all ${p.DurationMonths} months. Record a Final Review below.</div>` : ''}
       <div class="grid cols-3">
-        <div><label>Extend to</label><input type="date" id="pext-${p.ProbationID}" value="${p.ExtendedEndDate||''}"></div>
-        <div><label>Status</label><select id="pstat-${p.ProbationID}"><option ${p.Status==='Active'?'selected':''}>Active</option><option ${p.Status==='Extended'?'selected':''}>Extended</option><option ${p.Status==='Passed'?'selected':''}>Passed</option><option ${p.Status==='Failed'?'selected':''}>Failed</option></select></div>
-        <div><label>Notes</label><input id="pnote-${p.ProbationID}" value="${esc(p.Notes||'')}"></div>
+        <div><label>Extend duration by (months)</label><input type="number" id="pext-${p.CycleID}" placeholder="e.g. 1"></div>
+        <div><label>Notes</label><input id="pnote-${p.CycleID}" value="${esc(p.Notes||'')}"></div>
+        <div style="align-self:end;"><button class="btn secondary small" onclick="extendProbation('${p.CycleID}')">Save Extension/Notes</button></div>
       </div>
-      <button class="btn secondary small" style="margin-top:8px;" onclick="updateProbation('${p.ProbationID}')">Save Changes</button>
-      <hr class="sep"><p class="small"><b>Submitted entries:</b> ${entries.length}</p>
-      ${entries.map(e=>`<p class="small">${e.Month} ${e.Year} — ${e.OverallScore}% <span class="badge ${e.Status.toLowerCase()}">${e.Status}</span></p>`).join('')}
+      <hr class="sep"><h4 style="margin:8px 0;">Final Review</h4>
+      <div class="grid cols-3">
+        <div><label>Decision</label><select id="pdec-${p.CycleID}"><option>Passed</option><option>Failed</option><option>Extended</option></select></div>
+        <div><label>Extend to date (if Extended)</label><input type="date" id="pextdate-${p.CycleID}"></div>
+        <div><label>Extend by months (if Extended)</label><input type="number" id="pextm-${p.CycleID}"></div>
+      </div>
+      <label>Summary</label><textarea id="psum-${p.CycleID}"></textarea>
+      <label>Improvement Plan (if Failed/Extended)</label><textarea id="pplan-${p.CycleID}"></textarea>
+      <button class="btn gold" style="margin-top:8px;" onclick="finalizeProbation('${p.CycleID}')">Record Final Review</button>
+      <hr class="sep"><p class="small"><b>Monthly entries:</b> ${entries.length}</p>
+      ${entries.map(e=>`<p class="small">${esc(e.PeriodLabel)} — ${e.OverallScore}% <span class="badge ${(e.Status||'').toLowerCase()}">${e.Status}</span></p>`).join('')}
+      ${reviews.map(r=>`<p class="small"><b>Final Review:</b> ${r.Decision} — ${esc(r.Summary)}</p>`).join('')}
     </div>`;
   }).join('') || '<p class="muted">No probation records yet.</p>';
 }
-async function updateProbation(id) {
-  const patch = { ExtendedEndDate: document.getElementById('pext-'+id).value, Status: document.getElementById('pstat-'+id).value, Notes: document.getElementById('pnote-'+id).value };
-  await Api.post('editProbation', { probationId: id, patch });
+async function extendProbation(cycleId) {
+  const months = val('pext-'+cycleId);
+  const rec = OV.cycles.find(c=>c.CycleID===cycleId);
+  const patch = { Notes: val('pnote-'+cycleId) };
+  if (months) patch.DurationMonths = (parseInt(rec.DurationMonths,10)||3) + parseInt(months,10);
+  await Api.post('editCycle', { cycleId, patch });
   alert('Updated.'); refresh();
+}
+async function finalizeProbation(cycleId) {
+  const decision = val('pdec-'+cycleId);
+  await Api.post('finalizeCycle', { cycleId, decision, summary: val('psum-'+cycleId), improvementPlan: val('pplan-'+cycleId), extendToDate: val('pextdate-'+cycleId), extendMonths: val('pextm-'+cycleId) });
+  alert('Final review recorded — staff notified.'); refresh();
 }
 
 /* ---------------- PIP MGMT ---------------- */
 async function addPipRec() {
-  await Api.post('addPip', { staffId: val('ppStaff'), startDate: val('ppStart'), endDate: val('ppEnd'), reason: val('ppReason') });
+  await Api.post('startCycle', { staffId: val('ppStaff'), type: 'PIP', startDate: val('ppStart'), endDate: val('ppEnd'), reason: val('ppReason') });
   ['ppStart','ppEnd','ppReason'].forEach(id=>document.getElementById(id).value='');
-  alert('PIP started.'); refresh();
+  alert('PIP started. Go to "Set Objectives" to send this week\'s targets.'); refresh();
 }
 function renderPipList() {
   const staffOf = id => (OV.staff.find(s=>s.StaffID===id)||{}).Name || id;
-  document.getElementById('pipList').innerHTML = OV.pip.map(p => {
-    const entries = OV.pipEntries.filter(e=>e.PIPID===p.PIPID).sort((a,b)=>b.WeekEnding.localeCompare(a.WeekEnding));
+  const pips = OV.cycles.filter(c=>c.Type==='PIP');
+  document.getElementById('pipList').innerHTML = pips.map(p => {
+    const entries = OV.entries.filter(e=>e.CycleID===p.CycleID).sort((a,b)=>(b.PeriodLabel||'').localeCompare(a.PeriodLabel||''));
     return `<div class="card" style="background:#fafbfd;">
       <div class="flex between"><h3 style="margin:0;">${esc(staffOf(p.StaffID))}</h3><span class="badge pip">${p.Status}</span></div>
       <p class="small muted">Start ${fmtDate(p.StartDate)} · End ${fmtDate(p.EndDate)}</p>
       <p class="small">${esc(p.Reason||'')} ${p.Notes?(' — '+esc(p.Notes)):''}</p>
       <div class="grid cols-3">
-        <div><label>New End Date (extend)</label><input type="date" id="pipext-${p.PIPID}" value="${p.EndDate||''}"></div>
-        <div><label>Status</label><select id="pipstat-${p.PIPID}"><option ${p.Status==='Active'?'selected':''}>Active</option><option ${p.Status==='Extended'?'selected':''}>Extended</option><option ${p.Status==='Passed'?'selected':''}>Passed</option><option ${p.Status==='Failed'?'selected':''}>Failed</option></select></div>
-        <div><label>Notes</label><input id="pipnote-${p.PIPID}" value="${esc(p.Notes||'')}"></div>
+        <div><label>New End Date (extend)</label><input type="date" id="pipext-${p.CycleID}"></div>
+        <div><label>Notes</label><input id="pipnote-${p.CycleID}" value="${esc(p.Notes||'')}"></div>
+        <div style="align-self:end;"><button class="btn secondary small" onclick="extendPip('${p.CycleID}')">Save Extension/Notes</button></div>
       </div>
-      <button class="btn secondary small" style="margin-top:8px;" onclick="updatePip('${p.PIPID}')">Save Changes</button>
+      <hr class="sep"><h4 style="margin:8px 0;">Final Review</h4>
+      <div class="grid cols-3">
+        <div><label>Decision</label><select id="pipdec-${p.CycleID}"><option>Passed</option><option>Failed</option><option>Extended</option></select></div>
+        <div><label>Extend to date (if Extended)</label><input type="date" id="pipextdate-${p.CycleID}"></div>
+      </div>
+      <label>Summary</label><textarea id="pipsum-${p.CycleID}"></textarea>
+      <label>Improvement Plan (if Failed/Extended)</label><textarea id="pipplan-${p.CycleID}"></textarea>
+      <button class="btn gold" style="margin-top:8px;" onclick="finalizePip('${p.CycleID}')">Record Final Review</button>
       <hr class="sep">
       <p class="small"><b>Weekly entries (click to correct a previous submission):</b></p>
-      ${entries.map(e=>`
-        <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
-          <div class="flex between"><b class="small">Week ending ${e.WeekEnding}</b><span class="badge ${e.Status.toLowerCase()}">${e.Status}</span></div>
-          ${objectivesTableHtml(JSON.parse(e.ObjectivesJSON||'[]'))}
-          <p class="small">${esc(e.EmployeeReport||'')}</p>
-          <button class="btn secondary small" onclick="editPipEntry('${p.PIPID}','${e.EntryID}')">Correct This Entry</button>
-        </div>`).join('') || '<p class="muted small">No entries yet.</p>'}
+      ${entries.map(e=>{
+        const objs = OV.objectives.filter(o=>o.EntryID===e.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder);
+        return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+          <div class="flex between"><b class="small">${esc(e.PeriodLabel)}</b><span class="badge ${(e.Status||'').toLowerCase()}">${e.Status}</span></div>
+          ${objectivesTableHtml(objs, true)}
+        </div>`;
+      }).join('') || '<p class="muted small">No entries yet.</p>'}
     </div>`;
   }).join('') || '<p class="muted">No PIP records yet.</p>';
 }
-async function updatePip(id) {
-  const patch = { EndDate: document.getElementById('pipext-'+id).value, Status: document.getElementById('pipstat-'+id).value, Notes: document.getElementById('pipnote-'+id).value };
-  await Api.post('editPip', { pipId: id, patch });
+async function extendPip(cycleId) {
+  const patch = { Notes: val('pipnote-'+cycleId) };
+  const newEnd = val('pipext-'+cycleId);
+  if (newEnd) patch.EndDate = newEnd;
+  await Api.post('editCycle', { cycleId, patch });
   alert('Updated.'); refresh();
 }
-async function editPipEntry(pipId, entryId) {
-  const entry = OV.pipEntries.find(e=>e.EntryID===entryId);
-  const objs = JSON.parse(entry.ObjectivesJSON||'[]');
-  const newObjs = objs.map(o => {
-    const actual = prompt(`${o.objective} — enter corrected Actual (was ${o.actual}, target ${o.target})`, o.actual);
-    return Object.assign({}, o, { actual: actual===null? o.actual : actual });
-  });
-  const res = await Api.post('submitPipEntry', { entryId, pipId, staffId: entry.StaffID, weekEnding: entry.WeekEnding, objectives: newObjs, employeeReport: entry.EmployeeReport, hrEdit: true });
-  if (res.error) { alert(res.error); return; }
-  alert('Entry corrected. New score: ' + res.overallScore + '%.'); refresh();
+async function finalizePip(cycleId) {
+  const decision = val('pipdec-'+cycleId);
+  await Api.post('finalizeCycle', { cycleId, decision, summary: val('pipsum-'+cycleId), improvementPlan: val('pipplan-'+cycleId), extendToDate: val('pipextdate-'+cycleId) });
+  alert('Final review recorded — staff notified.'); refresh();
 }
 
 /* ---------------- YEARLY & BEST PERFORMER ---------------- */
 function renderYearlyTable() {
-  document.getElementById('yearlyTable').innerHTML = (OV.yearly||[]).map(y => {
-    const staffOf = (OV.staff.find(s=>s.StaffID===y.StaffID)||{}).Name || y.StaffID;
-    return `<tr><td>${esc(staffOf)}</td><td>${y.Year}</td><td>${esc(y.Department)}</td><td>${y.Score}%</td><td>${y.Eligible? 'Yes':'No'}</td></tr>`;
+  document.getElementById('yearlyTable').innerHTML = (OV.yearly||[]).map(Y => {
+    const staffOf = (OV.staff.find(S=>S.StaffID===Y.StaffID)||{}).Name || Y.StaffID;
+    return `<tr><td>${esc(staffOf)}</td><td>${Y.Year}</td><td>${esc(Y.Department)}</td><td>${Y.Score}%</td><td>${Y.Eligible? 'Yes':'No'}</td></tr>`;
   }).join('') || '<tr><td colspan="5" class="muted">No records yet.</td></tr>';
 }
 async function saveYearly() {
@@ -379,15 +461,15 @@ async function declareBest() {
   const res = await Api.post('declareBestPerformer', { year: val('bpYear') });
   const el = document.getElementById('bpResult');
   if (!res.winners || !res.winners.length) { el.innerHTML = '<p class="muted">No eligible yearly records found for that year yet.</p>'; return; }
-  el.innerHTML = res.winners.map(w => `<div class="card" style="background:#FFFBEA;"><b>${esc(w.department)}:</b> ${esc(w.name)} — ${w.score}% <span class="badge signed">Winner announced by email</span></div>`).join('');
+  el.innerHTML = res.winners.map(W => `<div class="card" style="background:#FFFBEA;"><b>${esc(W.department)}:</b> ${esc(W.name)} — ${W.score}% <span class="badge signed">Winner announced by email</span></div>`).join('');
 }
 
 /* ---------------- SUGGESTIONS ---------------- */
 function renderSuggestions() {
-  document.getElementById('suggestionsList').innerHTML = (OV.suggestions||[]).slice().reverse().map(s => `
+  document.getElementById('suggestionsList').innerHTML = (OV.suggestions||[]).slice().reverse().map(S => `
     <div class="card" style="background:#fafbfd;">
-      <div class="flex between"><b>${esc(s.StaffName)}</b><span class="badge submitted">${esc(s.Category)}</span></div>
-      <p class="small">${esc(s.Text)}</p><p class="small muted">${fmtDate(s.Date)}</p>
+      <div class="flex between"><b>${esc(S.StaffName)}</b><span class="badge submitted">${esc(S.Category)}</span></div>
+      <p class="small">${esc(S.Text)}</p><p class="small muted">${fmtDate(S.Date)}</p>
     </div>`).join('') || '<p class="muted">No suggestions yet.</p>';
 }
 
