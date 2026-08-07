@@ -10,11 +10,11 @@
 <div class="center-wrap">
   <div class="card">
     <h2 style="text-align:center;margin-bottom:2px;">Performance &amp; Appraisal System</h2>
-    <p class="muted" style="text-align:center;margin-top:0;" id="companyName">Loading…</p>
+    <P class="muted" style="text-align:center;margin-top:0;" id="companyName">Loading…</P>
 
     <div id="demoBanner" class="note hidden">
       Demo mode — no backend connected yet. Data is stored only in this browser so you can preview the system.
-      Try Staff ID <b>EMP001</b> / PIN <b>1111</b>, or HR ID <b>HR001</b> / PIN <b>9999</b> (HR console PIN: <b>2580</b>).
+      Try Staff ID <B>EMP001</B> / PIN <B>1111</B>, or HR ID <B>HR001</B> / PIN <B>9999</B> (HR console PIN: <B>2580</B>).
       <div style="margin-top:8px;"><button class="btn secondary small" onclick="Api.resetDemo()">Reset demo data</button></div>
     </div>
 
@@ -39,7 +39,7 @@
       <input id="hrPin1" type="password" placeholder="Your staff PIN">
       <label>HR Console Access PIN</label>
       <input id="hrPin2" type="password" placeholder="Separate HR console PIN">
-      <p class="muted small">This second PIN is required to enter the HR console, even for HR-role accounts, so the console can't be opened from a shared or staff device.</p>
+      <P class="muted small">This second PIN is required to enter the HR console, even for HR-role accounts, so the console can't be opened from a shared or staff device.</P>
       <button class="btn gold" style="width:100%;margin-top:8px;" onclick="hrLogin()">Log in to HR Console</button>
       <div class="error" id="hrErr"></div>
     </div>
@@ -49,11 +49,11 @@
 <script src="config.js"></script>
 <script src="api.js"></script>
 <script>
-function switchTab(t) {
-  document.getElementById('tabStaff').classList.toggle('active', t==='staff');
-  document.getElementById('tabHr').classList.toggle('active', t==='hr');
-  document.getElementById('staffPane').classList.toggle('hidden', t!=='staff');
-  document.getElementById('hrPane').classList.toggle('hidden', t!=='hr');
+function switchTab(T) {
+  document.getElementById('tabStaff').classList.toggle('active', T==='staff');
+  document.getElementById('tabHr').classList.toggle('active', T==='hr');
+  document.getElementById('staffPane').classList.toggle('hidden', T!=='staff');
+  document.getElementById('hrPane').classList.toggle('hidden', T!=='hr');
 }
 
 async function init() {
