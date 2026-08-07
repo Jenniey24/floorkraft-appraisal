@@ -18,52 +18,20 @@
   <div id="demoNote" class="note hidden">Demo mode — actions are simulated in this browser only. No real emails are sent.</div>
 
   <div class="tabs">
-    <button class="active" data-tab="monthly" onclick="showTab('monthly')">Monthly Appraisal</button>
-    <button data-tab="pip" onclick="showTab('pip')" id="tabPipBtn">PIP Weekly Review</button>
-    <button data-tab="probation" onclick="showTab('probation')" id="tabProbationBtn">Probation Review</button>
+    <button class="active" data-tab="current" onclick="showTab('current')" id="tabCurrentBtn">My Current Period</button>
     <button data-tab="history" onclick="showTab('history')">My History</button>
     <button data-tab="suggest" onclick="showTab('suggest')">Suggestion Box</button>
   </div>
 
-  <!-- MONTHLY -->
-  <div id="pane-monthly" class="pane">
-    <div class="card">
-      <h2>Monthly Appraisal</h2>
-      <div class="grid cols-2">
-        <div><label>Month</label><select id="mMonth"></select></div>
-        <div><label>Year</label><input id="mYear" type="number"></div>
-      </div>
-      <table style="margin-top:14px;">
-        <thead><tr>
-          <th>#</th><th>Objective</th><th>Key Result (SMART KPI)</th><th>Unit</th><th>Weight %</th><th>Target</th><th>Actual</th><th>Achv %</th><th></th>
-        </tr></thead>
-        <tbody id="mRows"></tbody>
-      </table>
-      <button class="btn secondary small" style="margin-top:8px;" onclick="addObjRow('mRows')">+ Add objective</button>
-      <div class="right muted" style="margin-top:6px;">Overall score auto-calculates on submit: <b id="mScorePreview">—</b></div>
-      <label style="margin-top:16px;">Employee Report — What Was Achieved This Month</label>
-      <textarea id="mReport" placeholder="Summarize what you achieved this month..."></textarea>
-      <button class="btn" style="margin-top:14px;" onclick="submitMonthly()">Submit for HR Review</button>
-      <div class="error" id="mErr"></div>
-    </div>
+  <div id="pane-current" class="pane">
+    <div class="card" id="statusCard"></div>
+    <div class="card hidden" id="entryCard"></div>
   </div>
 
-  <!-- PIP -->
-  <div id="pane-pip" class="pane hidden">
-    <div class="card" id="pipCard"></div>
-  </div>
-
-  <!-- PROBATION -->
-  <div id="pane-probation" class="pane hidden">
-    <div class="card" id="probationCard"></div>
-  </div>
-
-  <!-- HISTORY -->
   <div id="pane-history" class="pane hidden">
-    <div class="card"><h2>My Appraisal History</h2><div id="historyList"></div></div>
+    <div class="card"><h2>My History</h2><div id="historyList"></div></div>
   </div>
 
-  <!-- SUGGESTIONS -->
   <div id="pane-suggest" class="pane hidden">
     <div class="card">
       <h2>Suggestion Box</h2>
@@ -90,17 +58,9 @@ let CURRENT = JSON.parse(sessionStorage.getItem('currentStaff') || 'null');
 if (!CURRENT) window.location.href = 'index.html';
 document.getElementById('whoName').innerText = CURRENT.Name + ' · ' + CURRENT.StaffID;
 document.getElementById('demoNote').classList.toggle('hidden', !DEMO_MODE);
-
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-function fillMonthSelect(id, def) {
-  const sel = document.getElementById(id); sel.innerHTML = '';
-  MONTHS.forEach(m => { const o=document.createElement('option'); o.value=m; o.text=m; if(m===def) o.selected=true; sel.appendChild(o); });
-}
-const now = new Date();
-fillMonthSelect('mMonth', MONTHS[now.getMonth()]);
-document.getElementById('mYear').value = now.getFullYear();
-
 function logout() { sessionStorage.clear(); window.location.href = 'index.html'; }
+function esc(s){ return String(s||'').replace(/"/g,'&quot;'); }
+function fmtDate(d) { if(!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString(); }
 
 function showTab(name) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
@@ -109,178 +69,142 @@ function showTab(name) {
   if (name==='history') renderHistory();
 }
 
-function objRowHtml(idPrefix, kpi) {
-  return `<tr>
-    <td><input class="cell obj" value="${esc(kpi?kpi.Objective||kpi.objective||'':'')}"></td>
-    <td><input class="cell kr" value="${esc(kpi?kpi.KeyResult||kpi.keyResult||'':'')}"></td>
-    <td><input class="cell unit" style="width:60px" value="${esc(kpi?kpi.Unit||kpi.unit||'':'')}"></td>
-    <td><input class="cell weight" type="number" style="width:60px" value="${kpi?kpi.DefaultWeight||kpi.weight||'':''}"></td>
-    <td><input class="cell target" type="number" style="width:80px"></td>
-    <td><input class="cell actual" type="number" style="width:80px"></td>
-    <td class="cell achv muted">—</td>
-    <td><button class="btn secondary small" onclick="this.closest('tr').remove()">✕</button></td>
-  </tr>`;
+let DASH = null;
+async function load() {
+  DASH = await Api.get('staffDashboard', { staffId: CURRENT.StaffID });
+  renderStatus();
+  renderCurrentEntry();
 }
-function esc(s){ return String(s||'').replace(/"/g,'&quot;'); }
+load();
 
-function addObjRow(tbodyId, kpi) {
-  document.getElementById(tbodyId).insertAdjacentHTML('beforeend', objRowHtml(tbodyId, kpi));
+function statusBadge(status) {
+  const cls = status==='PIP' ? 'pip' : status==='Probation' ? 'probation' : 'active';
+  return `<span class="badge ${cls}">${status}</span>`;
 }
 
-async function loadKpiDefaults() {
-  const templates = await Api.get('kpiTemplates', { department: CURRENT.Department });
-  if (templates && templates.length) templates.forEach(k => addObjRow('mRows', k));
-  else addObjRow('mRows');
-}
-loadKpiDefaults();
-
-function readObjectives(tbodyId) {
-  const rows = document.querySelectorAll('#'+tbodyId+' tr');
-  return Array.from(rows).map(r => ({
-    objective: r.querySelector('.obj').value,
-    keyResult: r.querySelector('.kr').value,
-    unit: r.querySelector('.unit').value,
-    weight: r.querySelector('.weight').value,
-    target: r.querySelector('.target').value,
-    actual: r.querySelector('.actual').value
-  })).filter(o => o.objective);
-}
-
-async function submitMonthly() {
-  const objectives = readObjectives('mRows');
-  const errEl = document.getElementById('mErr'); errEl.innerText='';
-  if (!objectives.length) { errEl.innerText = 'Add at least one objective.'; return; }
-  const totalWeight = objectives.reduce((s,o)=>s+(parseFloat(o.weight)||0),0);
-  if (Math.round(totalWeight) !== 100) { errEl.innerText = `Weights should total 100% (currently ${totalWeight}%). You can still submit if this is intentional.`; }
-  const res = await Api.post('submitMonthly', {
-    staffId: CURRENT.StaffID, month: document.getElementById('mMonth').value, year: document.getElementById('mYear').value,
-    objectives, employeeReport: document.getElementById('mReport').value
-  });
-  if (res.error) { errEl.innerText = res.error; return; }
-  document.getElementById('mScorePreview').innerText = res.overallScore + '%';
-  alert('Submitted! Overall score: ' + res.overallScore + '%. HR will review and you\'ll get an email with the result.' + (res.demoNote?(' ('+res.demoNote+')'):''));
-}
-
-/* ---------------- PIP & PROBATION PANES ---------------- */
-async function loadStatusPanes() {
-  const dash = await Api.get('staffDashboard', { staffId: CURRENT.StaffID });
-  document.getElementById('tabPipBtn').classList.toggle('hidden', !dash.pip);
-  document.getElementById('tabProbationBtn').classList.toggle('hidden', !dash.probation);
-  window.DASH = dash;
-  if (dash.pip) renderPip(dash);
-  if (dash.probation) renderProbation(dash);
-}
-loadStatusPanes();
-
-function weekEndingOptions() {
-  // last 8 Fridays
-  const opts = [];
-  let d = new Date();
-  d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7)); // next/this Friday
-  for (let i=0;i<8;i++) {
-    opts.push(new Date(d).toISOString().slice(0,10));
-    d.setDate(d.getDate()-7);
+function renderStatus() {
+  const s = DASH.staff;
+  let html = `<h2>Hello, ${esc(s.Name)} ${statusBadge(s.Status)}</h2>`;
+  if (DASH.cycle) {
+    const c = DASH.cycle;
+    if (c.Type === 'Probation') {
+      html += `<p class="muted">Probation started ${fmtDate(c.StartDate)} · Month ${c.CurrentPeriod} of ${c.DurationMonths} · Ends ${fmtDate(c.EndDate)}${c.Status==='Extended'?' (Extended)':''}</p>`;
+    } else if (c.Type === 'PIP') {
+      html += `<p class="muted">PIP started ${fmtDate(c.StartDate)} · Ends ${fmtDate(c.EndDate)}${c.Status==='Extended'?' (Extended)':''}${c.Reason?(' · Reason: '+esc(c.Reason)):''}</p>`;
+    }
+    if (c.Notes) html += `<p class="small muted">${esc(c.Notes)}</p>`;
+  } else {
+    html += `<p class="muted">You are on the standard monthly appraisal track.</p>`;
   }
-  return opts;
+  document.getElementById('statusCard').innerHTML = html;
 }
 
-function renderPip(dash) {
-  const p = dash.pip;
-  const badge = p.Status === 'Extended' ? '<span class="badge pip">Extended</span>' : '<span class="badge pip">Active PIP</span>';
-  let html = `<h2>Performance Improvement Plan ${badge}</h2>
-    <p class="muted">Started ${fmtDate(p.StartDate)} · Ends ${fmtDate(p.EndDate)}${p.Reason?(' · Reason: '+esc(p.Reason)):''}</p>
-    <p class="muted">${esc(p.Notes||'')}</p><hr class="sep">
-    <h3>Submit This Week's Review</h3>
-    <label>Week Ending (Friday)</label>
-    <select id="pipWeek">${weekEndingOptions().map(d=>`<option value="${d}">${d}</option>`).join('')}</select>
-    <table style="margin-top:10px;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Weight %</th><th>Target</th><th>Actual</th><th></th></tr></thead>
-    <tbody id="pipRows"></tbody></table>
-    <button class="btn secondary small" style="margin-top:8px;" onclick="addObjRow('pipRows')">+ Add objective</button>
-    <label style="margin-top:14px;">What did you achieve this week?</label>
-    <textarea id="pipReport"></textarea>
-    <button class="btn" style="margin-top:12px;" onclick="submitPip()">Submit Weekly Review</button>
-    <div class="error" id="pipErr"></div>
-    <hr class="sep"><h3>Previous Weeks</h3>
-    <div id="pipHistory"></div>`;
-  document.getElementById('pipCard').innerHTML = html;
-  const templates = dash.kpiTemplates || [];
-  if (templates.length) templates.forEach(k => addObjRow('pipRows', k)); else addObjRow('pipRows');
-
-  const hist = document.getElementById('pipHistory');
-  if (!dash.pipEntries.length) hist.innerHTML = '<p class="muted">No entries yet.</p>';
-  else hist.innerHTML = dash.pipEntries.sort((a,b)=>b.WeekEnding.localeCompare(a.WeekEnding)).map(e => entryCardHtml('Week ending '+e.WeekEnding, e)).join('');
+function latestOpenEntry() {
+  // entry HR has built objectives for, awaiting the staff's Actuals/Comment, or already submitted-but-not-yet-signed (still viewable/editable pre-submit only)
+  const open = DASH.entries.filter(e => e.Status === 'AwaitingStaff');
+  if (open.length) return open.sort((a,b)=> (b.PeriodLabel||'').localeCompare(a.PeriodLabel||''))[0];
+  return null;
 }
 
-function renderProbation(dash) {
-  const p = dash.probation;
-  let html = `<h2>Probation Review <span class="badge probation">Probation</span></h2>
-    <p class="muted">Started ${fmtDate(p.StartDate)} · Original end ${fmtDate(p.OriginalEndDate)}${p.ExtendedEndDate?(' · Extended to '+fmtDate(p.ExtendedEndDate)):''}</p>
-    <p class="muted">${esc(p.Notes||'')}</p><hr class="sep">
-    <h3>Submit This Month's Review</h3>
-    <div class="grid cols-2"><div><label>Month</label><select id="probMonth"></select></div><div><label>Year</label><input id="probYear" type="number" value="${now.getFullYear()}"></div></div>
-    <table style="margin-top:10px;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Weight %</th><th>Target</th><th>Actual</th><th></th></tr></thead>
-    <tbody id="probRows"></tbody></table>
-    <button class="btn secondary small" style="margin-top:8px;" onclick="addObjRow('probRows')">+ Add objective</button>
-    <label style="margin-top:14px;">What did you achieve this month?</label>
-    <textarea id="probReport"></textarea>
-    <button class="btn" style="margin-top:12px;" onclick="submitProbation()">Submit Monthly Review</button>
-    <div class="error" id="probErr"></div>
-    <hr class="sep"><h3>Previous Months</h3>
-    <div id="probHistory"></div>`;
-  document.getElementById('probationCard').innerHTML = html;
-  fillMonthSelect('probMonth', MONTHS[now.getMonth()]);
-  const templates = dash.kpiTemplates || [];
-  if (templates.length) templates.forEach(k => addObjRow('probRows', k)); else addObjRow('probRows');
+function renderCurrentEntry() {
+  const entryCard = document.getElementById('entryCard');
+  const entry = latestOpenEntry();
+  if (!entry) {
+    entryCard.classList.remove('hidden');
+    entryCard.innerHTML = `<h3>No objectives awaiting your response right now.</h3><p class="muted">Once HR sets your objectives and targets for the next period, they'll appear here for you to fill in your Actual results.</p>`;
+    return;
+  }
+  entryCard.classList.remove('hidden');
+  const rows = entry.objectives.map(o => `
+    <tr>
+      <td>${esc(o.Objective)}</td>
+      <td>${esc(o.KeyResult)}</td>
+      <td>${esc(o.Unit)}</td>
+      <td>${o.Weight}%</td>
+      <td>${o.Target}</td>
+      <td><input class="cell actual" data-oid="${o.ObjectiveID}" data-target="${o.Target}" type="number" style="width:90px" placeholder="Actual"></td>
+      <td class="achv-${o.ObjectiveID} muted">—</td>
+    </tr>
+    <tr>
+      <td colspan="7"><textarea class="comment" data-oid="${o.ObjectiveID}" placeholder="Your comment on this objective (what happened, why, context)..." style="min-height:50px;"></textarea></td>
+    </tr>`).join('');
+  entryCard.innerHTML = `
+    <h2>${esc(entry.PeriodLabel)}</h2>
+    <p class="muted">These objectives and targets were set by HR. Fill in your Actual and a short comment for each — the Achievement % calculates automatically.</p>
+    <table><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Weight</th><th>Target</th><th>Actual</th><th>Achv%</th></tr></thead>
+    <tbody id="entryRows">${rows}</tbody></table>
+    <div class="right" style="margin-top:8px;">Live overall score: <b id="livePreview" class="score-pill">0%</b></div>
+    <button class="btn" style="margin-top:14px;" onclick="submitEntry('${entry.EntryID}')">Submit to HR</button>
+    <div class="error" id="entryErr"></div>`;
 
-  const hist = document.getElementById('probHistory');
-  if (!dash.probationEntries.length) hist.innerHTML = '<p class="muted">No entries yet.</p>';
-  else hist.innerHTML = dash.probationEntries.map(e => entryCardHtml(e.Month+' '+e.Year, e)).join('');
+  document.querySelectorAll('#entryRows .actual').forEach(inp => inp.addEventListener('input', recalcPreview));
+  recalcPreview();
 }
 
-function entryCardHtml(title, e) {
-  const statusClass = (e.Status||'').toLowerCase();
-  return `<div class="card" style="background:#fafbfd;">
-    <div class="flex between"><h3 style="margin:0;">${esc(title)}</h3><span class="badge ${statusClass}">${e.Status}</span></div>
-    <p class="small muted">Score: <b>${e.OverallScore}%</b></p>
-    <p class="small">${esc(e.EmployeeReport||'')}</p>
-    ${e.ManagerComments? `<p class="small"><b>HR Comments:</b> ${esc(e.ManagerComments)}</p>`:''}
-    ${e.ImprovementPlan? `<p class="small"><b>Improvement Plan:</b> ${esc(e.ImprovementPlan)}</p>`:''}
-  </div>`;
-}
-
-async function submitPip() {
-  const objectives = readObjectives('pipRows');
-  const errEl = document.getElementById('pipErr'); errEl.innerText='';
-  if (!objectives.length) { errEl.innerText='Add at least one objective.'; return; }
-  const res = await Api.post('submitPipEntry', {
-    pipId: window.DASH.pip.PIPID, staffId: CURRENT.StaffID, weekEnding: document.getElementById('pipWeek').value,
-    objectives, employeeReport: document.getElementById('pipReport').value
+function recalcPreview() {
+  const rows = document.querySelectorAll('#entryRows tr').length;
+  let weighted = 0;
+  document.querySelectorAll('#entryRows .actual').forEach(inp => {
+    const target = parseFloat(inp.dataset.target) || 0;
+    const actual = parseFloat(inp.value) || 0;
+    const achv = target ? Math.round((actual/target*100)*10)/10 : 0;
+    const cell = document.querySelector('.achv-'+inp.dataset.oid);
+    if (cell) cell.innerText = inp.value ? achv + '%' : '—';
   });
-  if (res.error) { errEl.innerText = res.error; return; }
-  alert('Weekly PIP review submitted. Score: ' + res.overallScore + '%.');
-  loadStatusPanes();
+  // weight lookup from the current open entry's objectives
+  const entry = latestOpenEntry();
+  if (!entry) return;
+  entry.objectives.forEach(o => {
+    const inp = document.querySelector(`.actual[data-oid="${o.ObjectiveID}"]`);
+    if (!inp) return;
+    const actual = parseFloat(inp.value) || 0;
+    const achv = o.Target ? (actual/o.Target*100) : 0;
+    weighted += achv * (parseFloat(o.Weight)||0)/100;
+  });
+  document.getElementById('livePreview').innerText = (Math.round(weighted*10)/10) + '%';
 }
 
-async function submitProbation() {
-  const objectives = readObjectives('probRows');
-  const errEl = document.getElementById('probErr'); errEl.innerText='';
-  if (!objectives.length) { errEl.innerText='Add at least one objective.'; return; }
-  const res = await Api.post('submitProbationEntry', {
-    probationId: window.DASH.probation.ProbationID, staffId: CURRENT.StaffID,
-    month: document.getElementById('probMonth').value, year: document.getElementById('probYear').value,
-    objectives, employeeReport: document.getElementById('probReport').value
-  });
+async function submitEntry(entryId) {
+  const errEl = document.getElementById('entryErr'); errEl.innerText = '';
+  const actuals = Array.from(document.querySelectorAll('#entryRows .actual')).map(inp => ({
+    objectiveId: inp.dataset.oid,
+    actual: inp.value,
+    comment: document.querySelector(`.comment[data-oid="${inp.dataset.oid}"]`).value
+  }));
+  if (actuals.some(a => a.actual === '')) {
+    if (!confirm('Some objectives have no Actual entered — submit anyway?')) return;
+  }
+  const res = await Api.post('submitEntry', { entryId, staffId: CURRENT.StaffID, actuals });
   if (res.error) { errEl.innerText = res.error; return; }
-  alert('Monthly probation review submitted. Score: ' + res.overallScore + '%.');
-  loadStatusPanes();
+  alert('Submitted! Overall score: ' + res.overallScore + '%. HR will review and you\'ll get an email with the result.' + (res.demoNote?(' ('+res.demoNote+')'):''));
+  load();
 }
 
 /* ---------------- HISTORY ---------------- */
-async function renderHistory() {
-  const dash = window.DASH || await Api.get('staffDashboard', { staffId: CURRENT.StaffID });
+function objectivesTableHtml(objs) {
+  if (!objs || !objs.length) return '';
+  return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th><th>Your Comment</th></tr></thead>
+  <tbody>${objs.map(O=>`<tr><td>${esc(O.Objective)}</td><td>${esc(O.KeyResult)}</td><td>${esc(O.Unit)}</td><td>${O.Weight}</td><td>${O.Target}</td><td>${O.Actual}</td><td><b>${O.Achv}%</b></td><td>${esc(O.EmployeeComment)}</td></tr>`).join('')}</tbody></table>`;
+}
+function renderHistory() {
   const list = document.getElementById('historyList');
-  if (!dash.monthly.length) { list.innerHTML = '<p class="muted">No submissions yet.</p>'; return; }
-  list.innerHTML = dash.monthly.sort((a,b)=>b.SubmittedDate.localeCompare(a.SubmittedDate)).map(m => entryCardHtml(m.Month+' '+m.Year, m)).join('');
+  const done = DASH.entries.filter(E => E.Status !== 'AwaitingStaff').sort((A,B)=>(B.SubmittedDate||'').localeCompare(A.SubmittedDate||''));
+  if (!done.length) { list.innerHTML = '<p class="muted">No submissions yet.</p>'; return; }
+  list.innerHTML = done.map(E => `
+    <div class="card" style="background:#fafbfd;">
+      <div class="flex between"><h3 style="margin:0;">${esc(E.PeriodLabel)}</h3><span class="badge ${(E.Status||'').toLowerCase()}">${E.Status}</span></div>
+      <p class="small muted">Overall score: <b>${E.OverallScore}%</b></p>
+      ${objectivesTableHtml(E.objectives)}
+    </div>`).join('');
+  const reviews = DASH.finalReviews || [];
+  if (reviews.length) {
+    list.innerHTML += `<h3 style="margin-top:20px;">Final Reviews</h3>` + reviews.map(R => `
+      <div class="card" style="background:#FFFBEA;">
+        <div class="flex between"><b>${esc(R.Type)} — ${esc(R.Decision)}</b><span class="small muted">${fmtDate(R.ReviewedDate)}</span></div>
+        <p class="small">${esc(R.Summary)}</p>
+        ${R.ImprovementPlan?`<p class="small"><b>Improvement Plan:</b> ${esc(R.ImprovementPlan)}</p>`:''}
+      </div>`).join('');
+  }
 }
 
 /* ---------------- SUGGESTIONS ---------------- */
@@ -295,8 +219,6 @@ async function submitSuggestion() {
   document.getElementById('sugText').value = '';
   document.getElementById('sugOk').classList.remove('hidden');
 }
-
-function fmtDate(d) { if(!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString(); }
 </script>
 </body>
 </html>
