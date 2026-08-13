@@ -73,7 +73,11 @@
         <thead><tr><th>Objective</th><th>Key Result (SMART KPI)</th><th>Unit</th><th>Weight %</th><th>Target</th><th></th></tr></thead>
         <tbody id="soRows"></tbody>
       </table>
-      <button class="btn secondary small" style="margin-top:8px;" onclick="addSoRow()">+ Add objective row</button>
+      <div class="flex" style="margin-top:8px;">
+        <button class="btn secondary small" onclick="addSoRow()">+ Add objective row</button>
+        <button class="btn secondary small" onclick="copyFromPrevious()">↻ Copy rows from their last period</button>
+      </div>
+      <p class="muted small" id="soCopyHint" style="margin-top:4px;"></p>
       <div class="right muted small" id="soWeightTotal" style="margin-top:6px;">Total weight: 0%</div>
       <button class="btn" style="margin-top:14px;" onclick="createEntryForStaff()">Send Objectives to Staff</button>
       <div class="error" id="soErr"></div>
@@ -268,6 +272,30 @@ function onSoStaffChange() {
   }
   document.getElementById('soRows').innerHTML=''; for(let i=0;i<3;i++) addSoRow();
   updateSoWeightTotal();
+  document.getElementById('soCopyHint').innerText = '';
+}
+function copyFromPrevious() {
+  const staffId = val('soStaff');
+  const hint = document.getElementById('soCopyHint');
+  if (!staffId) { hint.innerText = 'Select a staff member first.'; return; }
+  const staffEntries = OV.entries.filter(e => e.StaffID === staffId).sort((a,b) => (b.SubmittedDate||b.EntryID||'').localeCompare(a.SubmittedDate||a.EntryID||''));
+  if (!staffEntries.length) { hint.innerText = 'No previous period found for this staff member yet — add rows manually this time.'; return; }
+  const last = staffEntries[0];
+  const objs = OV.objectives.filter(o => o.EntryID === last.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder);
+  if (!objs.length) { hint.innerText = 'Their last period had no objective rows to copy.'; return; }
+  document.getElementById('soRows').innerHTML = '';
+  objs.forEach(o => {
+    document.getElementById('soRows').insertAdjacentHTML('beforeend', soRowHtml());
+    const rows = document.querySelectorAll('#soRows tr');
+    const r = rows[rows.length-1];
+    r.querySelector('.so-obj').value = o.Objective;
+    r.querySelector('.so-kr').value = o.KeyResult;
+    r.querySelector('.so-unit').value = o.Unit;
+    r.querySelector('.so-weight').value = o.Weight;
+    r.querySelector('.so-target').value = o.Target;
+  });
+  updateSoWeightTotal();
+  hint.innerText = `Copied ${objs.length} row(s) from "${last.PeriodLabel}" — Target and Actual are left as-is/blank; adjust anything that changed, then send.`;
 }
 async function createEntryForStaff() {
   const errEl = document.getElementById('soErr'); errEl.innerText='';
