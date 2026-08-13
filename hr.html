@@ -69,6 +69,7 @@
         <div><label>Period Label</label><input id="soPeriod" placeholder="e.g. July 2026 / Probation Month 2 / Week ending 2026-08-08"></div>
         <div id="soTrackInfo" class="muted small" style="align-self:end;"></div>
       </div>
+      <label class="flex" style="margin-top:6px;"><input type="checkbox" id="soYearly" style="width:auto;" onchange="onSoYearlyToggle()"> This is a Yearly Appraisal OKR set (works for any staff member — Active, Probation, or PIP — once a year)</label>
       <table style="margin-top:12px;">
         <thead><tr><th>Objective</th><th>Key Result (SMART KPI)</th><th>Unit</th><th>Weight %</th><th>Target</th><th></th></tr></thead>
         <tbody id="soRows"></tbody>
@@ -81,6 +82,11 @@
       <div class="right muted small" id="soWeightTotal" style="margin-top:6px;">Total weight: 0%</div>
       <button class="btn" style="margin-top:14px;" onclick="createEntryForStaff()">Send Objectives to Staff</button>
       <div class="error" id="soErr"></div>
+    </div>
+    <div class="card">
+      <h2>Objectives Awaiting Staff Response</h2>
+      <p class="muted">Already sent but not yet submitted — you can still edit or delete a row here before the staff member fills it in.</p>
+      <div id="awaitingList"></div>
     </div>
   </div>
 
@@ -98,6 +104,7 @@
     </div>
     <div class="card"><h2>Active / Past Probations</h2><div id="probationList"></div></div>
   </div>
+
 
   <!-- PIP -->
   <div id="pane-pip" class="pane hidden">
@@ -179,7 +186,7 @@ function scoreClass(s) { s=parseFloat(s); return s>=80?'score-good':s>=60?'score
 let OV = null;
 async function refresh() {
   OV = await Api.get('hrOverview');
-  renderStaffTable(); renderStaffSelects(); renderInbox();
+  renderStaffTable(); renderStaffSelects(); renderInbox(); renderAwaitingList();
   renderProbationList(); renderPipList(); renderYearlyTable(); renderSuggestions();
   document.getElementById('cfgCompany').value = OV.config.COMPANY_NAME||'';
   document.getElementById('cfgHrEmail').value = OV.config.HR_NOTIFY_EMAIL||'';
@@ -253,9 +260,20 @@ function updateSoWeightTotal() {
   let t=0; document.querySelectorAll('#soRows .so-weight').forEach(i=>t+=parseFloat(i.value)||0);
   document.getElementById('soWeightTotal').innerText = 'Total weight: ' + t + '%' + (t!==100?' (should total 100%)':'');
 }
+function onSoYearlyToggle() {
+  const isYearly = document.getElementById('soYearly').checked;
+  if (isYearly) {
+    document.getElementById('soTrackInfo').innerText = 'Track: Yearly Appraisal OKR — applies regardless of Active/Probation/PIP status';
+    const y = new Date().getFullYear();
+    document.getElementById('soPeriod').value = `Yearly Appraisal ${y}`;
+  } else {
+    onSoStaffChange();
+  }
+}
 function onSoStaffChange() {
   const staffId = val('soStaff');
   const s = OV.staff.find(x=>x.StaffID===staffId);
+  document.getElementById('soYearly').checked = false;
   const cycle = OV.cycles.find(c=>c.StaffID===staffId && (c.Status==='Active'||c.Status==='Extended'));
   const info = document.getElementById('soTrackInfo');
   if (!s) { info.innerText=''; return; }
@@ -300,25 +318,77 @@ function copyFromPrevious() {
 async function createEntryForStaff() {
   const errEl = document.getElementById('soErr'); errEl.innerText='';
   const staffId = val('soStaff'); if (!staffId) { errEl.innerText='Select a staff member.'; return; }
+  const isYearly = document.getElementById('soYearly').checked;
   const cycle = OV.cycles.find(c=>c.StaffID===staffId && (c.Status==='Active'||c.Status==='Extended'));
-  const type = cycle ? cycle.Type : 'Monthly';
+  const type = isYearly ? 'Yearly' : (cycle ? cycle.Type : 'Monthly');
   const rows = Array.from(document.querySelectorAll('#soRows tr')).map(r => ({
     objective: r.querySelector('.so-obj').value, keyResult: r.querySelector('.so-kr').value,
     unit: r.querySelector('.so-unit').value, weight: r.querySelector('.so-weight').value, target: r.querySelector('.so-target').value
   })).filter(o=>o.objective);
   if (!rows.length) { errEl.innerText = 'Add at least one objective.'; return; }
-  const res = await Api.post('createEntry', { staffId, type, cycleId: cycle?cycle.CycleID:'', periodLabel: val('soPeriod'), objectives: rows });
+  const res = await Api.post('createEntry', { staffId, type, cycleId: (isYearly?'':(cycle?cycle.CycleID:'')), periodLabel: val('soPeriod'), objectives: rows });
   if (res.error) { errEl.innerText = res.error; return; }
   alert('Objectives sent to staff.' + (res.demoNote?(' ('+res.demoNote+')'):''));
-  document.getElementById('soRows').innerHTML=''; document.getElementById('soPeriod').value='';
+  document.getElementById('soRows').innerHTML=''; document.getElementById('soPeriod').value=''; document.getElementById('soYearly').checked=false;
   refresh();
+}
+
+/* ---------------- OBJECTIVES AWAITING STAFF RESPONSE (editable before submission) ---------------- */
+function renderAwaitingList() {
+  const staffOf = id => (OV.staff.find(s=>s.StaffID===id)||{}).Name || id;
+  const waiting = OV.entries.filter(e => e.Status === 'AwaitingStaff');
+  document.getElementById('awaitingList').innerHTML = waiting.length ? waiting.map(e => {
+    const objs = OV.objectives.filter(o=>o.EntryID===e.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder);
+    return `<div class="card" style="background:#fafbfd;">
+      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(e.StaffID))} — ${esc(e.PeriodLabel)} <span class="badge ${statusClass(e.Type==='Monthly'?'Active':e.Type)}">${e.Type}</span></h3></div>
+      <table><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th></th></tr></thead>
+      <tbody>${objs.map(o=>`<tr>
+        <td><input class="cell" id="eo-obj-${o.ObjectiveID}" value="${esc(o.Objective)}"></td>
+        <td><input class="cell" id="eo-kr-${o.ObjectiveID}" value="${esc(o.KeyResult)}"></td>
+        <td><input class="cell" id="eo-unit-${o.ObjectiveID}" style="width:60px" value="${esc(o.Unit)}"></td>
+        <td><input class="cell" id="eo-weight-${o.ObjectiveID}" type="number" style="width:70px" value="${o.Weight}"></td>
+        <td><input class="cell" id="eo-target-${o.ObjectiveID}" type="number" style="width:90px" value="${o.Target}"></td>
+        <td><div class="flex"><button class="btn secondary small" onclick="saveObjectiveEdit('${o.ObjectiveID}')">Save</button><button class="btn secondary small" onclick="deleteObjective('${o.ObjectiveID}')">Delete</button></div></td>
+      </tr>`).join('')}</tbody></table>
+    </div>`;
+  }).join('') : '<p class="muted">Nothing waiting on a staff response right now.</p>';
+}
+async function saveObjectiveEdit(objectiveId) {
+  const patch = {
+    Objective: document.getElementById('eo-obj-'+objectiveId).value,
+    KeyResult: document.getElementById('eo-kr-'+objectiveId).value,
+    Unit: document.getElementById('eo-unit-'+objectiveId).value,
+    Weight: document.getElementById('eo-weight-'+objectiveId).value,
+    Target: document.getElementById('eo-target-'+objectiveId).value
+  };
+  await Api.post('updateObjectiveTargets', { objectiveId, patch });
+  alert('Saved.'); refresh();
 }
 
 /* ---------------- INBOX ---------------- */
 function objectivesTableHtml(objs, editable) {
   if (!objs || !objs.length) return '';
   return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th><th>Staff Comment</th>${editable?'<th></th>':''}</tr></thead>
-  <tbody>${objs.map(o=>`<tr><td>${esc(o.Objective)}</td><td>${esc(o.KeyResult)}</td><td>${esc(o.Unit)}</td><td>${o.Weight}</td><td>${o.Target}</td><td>${o.Actual}</td><td><b>${o.Achv}%</b></td><td>${esc(o.EmployeeComment)}</td>${editable?`<td><button class="btn secondary small" onclick="deleteObjective('${o.ObjectiveID}')">Delete</button></td>`:''}</tr>`).join('')}</tbody></table>`;
+  <tbody>${objs.map(o=>`<tr>
+    <td>${editable?`<input class="cell" id="io-obj-${o.ObjectiveID}" value="${esc(o.Objective)}">`:esc(o.Objective)}</td>
+    <td>${editable?`<input class="cell" id="io-kr-${o.ObjectiveID}" value="${esc(o.KeyResult)}">`:esc(o.KeyResult)}</td>
+    <td>${editable?`<input class="cell" id="io-unit-${o.ObjectiveID}" style="width:55px" value="${esc(o.Unit)}">`:esc(o.Unit)}</td>
+    <td>${editable?`<input class="cell" id="io-weight-${o.ObjectiveID}" type="number" style="width:60px" value="${o.Weight}">`:o.Weight}</td>
+    <td>${editable?`<input class="cell" id="io-target-${o.ObjectiveID}" type="number" style="width:70px" value="${o.Target}">`:o.Target}</td>
+    <td>${o.Actual}</td><td><b>${o.Achv}%</b></td><td>${esc(o.EmployeeComment)}</td>
+    ${editable?`<td><div class="flex"><button class="btn secondary small" onclick="saveInboxObjectiveEdit('${o.ObjectiveID}')">Save</button><button class="btn secondary small" onclick="deleteObjective('${o.ObjectiveID}')">Delete</button></div></td>`:''}
+  </tr>`).join('')}</tbody></table>`;
+}
+async function saveInboxObjectiveEdit(objectiveId) {
+  const patch = {
+    Objective: document.getElementById('io-obj-'+objectiveId).value,
+    KeyResult: document.getElementById('io-kr-'+objectiveId).value,
+    Unit: document.getElementById('io-unit-'+objectiveId).value,
+    Weight: document.getElementById('io-weight-'+objectiveId).value,
+    Target: document.getElementById('io-target-'+objectiveId).value
+  };
+  await Api.post('updateObjectiveTargets', { objectiveId, patch });
+  alert('Saved. Note: Achv% recalculates on the staff\'s next submission, not retroactively on this one.'); refresh();
 }
 async function deleteObjective(objectiveId) {
   if (!confirm('Delete this KPI row? This cannot be undone.')) return;
@@ -333,7 +403,7 @@ function renderInbox() {
     const objs = OV.objectives.filter(o=>o.EntryID===e.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder);
     return `<div class="card" style="background:#fafbfd;">
       <div class="flex between"><h3 style="margin:0;">${esc(staffOf(e.StaffID))} — ${esc(e.PeriodLabel)} <span class="badge ${statusClass(e.Type==='Monthly'?'Active':e.Type)}">${e.Type}</span></h3><span class="score-pill ${scoreClass(e.OverallScore)}">${e.OverallScore}%</span></div>
-      ${objectivesTableHtml(objs, false)}
+      ${objectivesTableHtml(objs, true)}
       <label>HR Comments</label><textarea id="cmt-${e.EntryID}"></textarea>
       <label>Improvement Plan / Suggestions</label><textarea id="imp-${e.EntryID}"></textarea>
       <div class="flex" style="margin-top:8px;">
