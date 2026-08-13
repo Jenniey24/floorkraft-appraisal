@@ -185,6 +185,40 @@ function fmtDate(d) { if(!d) return '—'; const dt = new Date(d); return isNaN(
 function val(id){ const el=document.getElementById(id); return el.value.trim ? el.value.trim() : el.value; }
 function statusClass(s) { s=(s||'').toLowerCase(); if(s==='pip') return 'pip'; if(s==='probation') return 'probation'; return 'active'; }
 function scoreClass(s) { s=parseFloat(s); return s>=80?'score-good':s>=60?'score-warn':'score-bad'; }
+function achvStatus(achv) {
+  achv = parseFloat(achv)||0;
+  if (achv >= 100) return { label: 'On Track', cls: 'signed' };
+  if (achv >= 70) return { label: 'Developing', cls: 'reviewed' };
+  return { label: 'Behind Target', cls: 'pip' };
+}
+function monthlyRollupHtml(cycle, entries) {
+  // Sums each goal's Target/Actual across every entry in this cycle (weekly for PIP, monthly for Probation),
+  // the same way the spreadsheet's master sheet rolls weekly figures into a MONTHLY column per goal.
+  const relevant = entries.filter(e => e.Status !== 'AwaitingStaff');
+  if (!relevant.length) return '<p class="muted small">No submitted entries yet to roll up.</p>';
+  const byGoal = {}; // key: Objective name -> { weight, target, actual, unit, keyResult }
+  relevant.forEach(e => {
+    OV.objectives.filter(o => o.EntryID === e.EntryID).forEach(o => {
+      const key = o.Objective;
+      if (!byGoal[key]) byGoal[key] = { keyResult: o.KeyResult, unit: o.Unit, weight: parseFloat(o.Weight)||0, target: 0, actual: 0 };
+      byGoal[key].target += parseFloat(o.Target)||0;
+      byGoal[key].actual += parseFloat(o.Actual)||0;
+    });
+  });
+  let overallWeighted = 0, totalWeight = 0;
+  const rows = Object.keys(byGoal).map(name => {
+    const g = byGoal[name];
+    const achv = g.target ? Math.round((g.actual/g.target*100)*10)/10 : 0;
+    const weighted = Math.round((achv * g.weight/100)*10)/10;
+    overallWeighted += weighted; totalWeight += g.weight;
+    const st = achvStatus(achv);
+    return `<tr><td>${esc(name)}</td><td>${esc(g.keyResult)}</td><td>${esc(g.unit)}</td><td>${g.weight}%</td><td>${g.target}</td><td>${g.actual}</td><td><b>${achv}%</b></td><td>${weighted}%</td><td><span class="badge ${st.cls}">${st.label}</span></td></tr>`;
+  }).join('');
+  const overallStatus = achvStatus(overallWeighted);
+  return `<table><thead><tr><th>Goal</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Monthly Target</th><th>Monthly Actual</th><th>Monthly Achv%</th><th>Weighted</th><th>Status</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr style="font-weight:700;"><td colspan="7" class="right">OVERALL SCORE (sum of weighted, ${totalWeight}% of weight assigned)</td><td>${Math.round(overallWeighted*10)/10}%</td><td><span class="badge ${overallStatus.cls}">${overallStatus.label}</span></td></tr></tfoot></table>`;
+}
 
 let OV = null;
 async function refresh() {
@@ -377,16 +411,16 @@ async function saveObjectiveEdit(objectiveId) {
 /* ---------------- INBOX ---------------- */
 function objectivesTableHtml(objs, editable) {
   if (!objs || !objs.length) return '';
-  return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th><th>Staff Comment</th>${editable?'<th></th>':''}</tr></thead>
-  <tbody>${objs.map(o=>`<tr>
+  return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th><th>Status</th><th>Staff Comment</th>${editable?'<th></th>':''}</tr></thead>
+  <tbody>${objs.map(o=>{ const st = achvStatus(o.Achv); return `<tr>
     <td>${editable?`<input class="cell" id="io-obj-${o.ObjectiveID}" value="${esc(o.Objective)}">`:esc(o.Objective)}</td>
     <td>${editable?`<input class="cell" id="io-kr-${o.ObjectiveID}" value="${esc(o.KeyResult)}">`:esc(o.KeyResult)}</td>
     <td>${editable?`<input class="cell" id="io-unit-${o.ObjectiveID}" style="width:55px" value="${esc(o.Unit)}">`:esc(o.Unit)}</td>
     <td>${editable?`<input class="cell" id="io-weight-${o.ObjectiveID}" type="number" style="width:60px" value="${o.Weight}">`:o.Weight}</td>
     <td>${editable?`<input class="cell" id="io-target-${o.ObjectiveID}" type="number" style="width:70px" value="${o.Target}">`:o.Target}</td>
-    <td>${o.Actual}</td><td><b>${o.Achv}%</b></td><td>${esc(o.EmployeeComment)}</td>
+    <td>${o.Actual}</td><td><b>${o.Achv}%</b></td><td><span class="badge ${st.cls}">${st.label}</span></td><td>${esc(o.EmployeeComment)}</td>
     ${editable?`<td><div class="flex"><button class="btn secondary small" onclick="saveInboxObjectiveEdit('${o.ObjectiveID}')">Save</button><button class="btn secondary small" onclick="deleteObjective('${o.ObjectiveID}')">Delete</button></div></td>`:''}
-  </tr>`).join('')}</tbody></table>`;
+  </tr>`; }).join('')}</tbody></table>`;
 }
 async function saveInboxObjectiveEdit(objectiveId) {
   const patch = {
@@ -466,6 +500,8 @@ function renderProbationList() {
       <p class="small muted">Start ${fmtDate(p.StartDate)} · Month ${p.CurrentPeriod} of ${p.DurationMonths} · Ends ${fmtDate(p.EndDate)}</p>
       <p class="small">${esc(p.Notes||'')}</p>
       ${needsFinal? `<div class="note">This staff member has completed all ${p.DurationMonths} months. Record a Final Review below.</div>` : ''}
+      <hr class="sep"><h4 style="margin:8px 0;">Overall Rollup Across All Months So Far</h4>
+      ${monthlyRollupHtml(p, entries)}
       <div class="grid cols-3">
         <div><label>Extend duration by (months)</label><input type="number" id="pext-${p.CycleID}" placeholder="e.g. 1"></div>
         <div><label>Notes</label><input id="pnote-${p.CycleID}" value="${esc(p.Notes||'')}"></div>
@@ -520,6 +556,8 @@ function renderPipList() {
         <div><label>Notes</label><input id="pipnote-${p.CycleID}" value="${esc(p.Notes||'')}"></div>
         <div style="align-self:end;"><button class="btn secondary small" onclick="extendPip('${p.CycleID}')">Save Extension/Notes</button></div>
       </div>
+      <hr class="sep"><h4 style="margin:8px 0;">Monthly Rollup (auto-calculated from her weekly entries)</h4>
+      ${monthlyRollupHtml(p, entries)}
       <hr class="sep"><h4 style="margin:8px 0;">Final Review</h4>
       <div class="grid cols-3">
         <div><label>Decision</label><select id="pipdec-${p.CycleID}"><option>Passed</option><option>Failed</option><option>Extended</option></select></div>
