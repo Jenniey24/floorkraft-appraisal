@@ -181,10 +181,16 @@ async function submitEntry(entryId) {
 }
 
 /* ---------------- HISTORY ---------------- */
+function achvStatus(achv) {
+  achv = parseFloat(achv)||0;
+  if (achv >= 100) return { label: 'On Track', cls: 'signed' };
+  if (achv >= 70) return { label: 'Developing', cls: 'reviewed' };
+  return { label: 'Behind Target', cls: 'pip' };
+}
 function objectivesTableHtml(objs) {
   if (!objs || !objs.length) return '';
-  return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th><th>Your Comment</th></tr></thead>
-  <tbody>${objs.map(O=>`<tr><td>${esc(O.Objective)}</td><td>${esc(O.KeyResult)}</td><td>${esc(O.Unit)}</td><td>${O.Weight}</td><td>${O.Target}</td><td>${O.Actual}</td><td><b>${O.Achv}%</b></td><td>${esc(O.EmployeeComment)}</td></tr>`).join('')}</tbody></table>`;
+  return `<table style="margin:8px 0;"><thead><tr><th>Objective</th><th>Key Result</th><th>Unit</th><th>Wt%</th><th>Target</th><th>Actual</th><th>Achv%</th><th>Status</th><th>Your Comment</th></tr></thead>
+  <tbody>${objs.map(O=>{ const st = achvStatus(O.Achv); return `<tr><td>${esc(O.Objective)}</td><td>${esc(O.KeyResult)}</td><td>${esc(O.Unit)}</td><td>${O.Weight}</td><td>${O.Target}</td><td>${O.Actual}</td><td><b>${O.Achv}%</b></td><td><span class="badge ${st.cls}">${st.label}</span></td><td>${esc(O.EmployeeComment)}</td></tr>`; }).join('')}</tbody></table>`;
 }
 function renderHistory() {
   const list = document.getElementById('historyList');
