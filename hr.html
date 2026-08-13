@@ -70,13 +70,16 @@
         <div id="soTrackInfo" class="muted small" style="align-self:end;"></div>
       </div>
       <label class="flex" style="margin-top:6px;"><input type="checkbox" id="soYearly" style="width:auto;" onchange="onSoYearlyToggle()"> This is a Yearly Appraisal OKR set (works for any staff member — Active, Probation, or PIP — once a year)</label>
+      <div class="grid cols-3" style="margin-top:10px;">
+        <div><label>Copy objectives from an earlier period (optional)</label><select id="soCopySource"><option value="">— none, start blank —</option></select></div>
+        <div style="align-self:end;"><button class="btn secondary small" onclick="copyFromPrevious()">↻ Copy Selected Period's Rows</button></div>
+      </div>
       <table style="margin-top:12px;">
         <thead><tr><th>Objective</th><th>Key Result (SMART KPI)</th><th>Unit</th><th>Weight %</th><th>Target</th><th></th></tr></thead>
         <tbody id="soRows"></tbody>
       </table>
       <div class="flex" style="margin-top:8px;">
         <button class="btn secondary small" onclick="addSoRow()">+ Add objective row</button>
-        <button class="btn secondary small" onclick="copyFromPrevious()">↻ Copy rows from their last period</button>
       </div>
       <p class="muted small" id="soCopyHint" style="margin-top:4px;"></p>
       <div class="right muted small" id="soWeightTotal" style="margin-top:6px;">Total weight: 0%</div>
@@ -269,8 +272,7 @@ function onSoYearlyToggle() {
   } else {
     onSoStaffChange();
   }
-}
-function onSoStaffChange() {
+}function onSoStaffChange() {
   const staffId = val('soStaff');
   const s = OV.staff.find(x=>x.StaffID===staffId);
   document.getElementById('soYearly').checked = false;
@@ -291,16 +293,23 @@ function onSoStaffChange() {
   document.getElementById('soRows').innerHTML=''; for(let i=0;i<3;i++) addSoRow();
   updateSoWeightTotal();
   document.getElementById('soCopyHint').innerText = '';
+  populateCopySource(staffId);
+}
+function populateCopySource(staffId) {
+  const sel = document.getElementById('soCopySource');
+  const staffEntries = OV.entries.filter(e => e.StaffID === staffId).sort((a,b) => (b.SubmittedDate||b.EntryID||'').localeCompare(a.SubmittedDate||a.EntryID||''));
+  sel.innerHTML = '<option value="">— none, start blank —</option>' + staffEntries.map(e => {
+    const count = OV.objectives.filter(o=>o.EntryID===e.EntryID).length;
+    return `<option value="${e.EntryID}">${esc(e.PeriodLabel)} (${count} objective${count===1?'':'s'}, ${e.Status})</option>`;
+  }).join('');
 }
 function copyFromPrevious() {
-  const staffId = val('soStaff');
+  const entryId = val('soCopySource');
   const hint = document.getElementById('soCopyHint');
-  if (!staffId) { hint.innerText = 'Select a staff member first.'; return; }
-  const staffEntries = OV.entries.filter(e => e.StaffID === staffId).sort((a,b) => (b.SubmittedDate||b.EntryID||'').localeCompare(a.SubmittedDate||a.EntryID||''));
-  if (!staffEntries.length) { hint.innerText = 'No previous period found for this staff member yet — add rows manually this time.'; return; }
-  const last = staffEntries[0];
-  const objs = OV.objectives.filter(o => o.EntryID === last.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder);
-  if (!objs.length) { hint.innerText = 'Their last period had no objective rows to copy.'; return; }
+  if (!entryId) { hint.innerText = 'Pick a period from the dropdown first.'; return; }
+  const objs = OV.objectives.filter(o => o.EntryID === entryId).sort((a,b)=>a.SortOrder-b.SortOrder);
+  const entry = OV.entries.find(e=>e.EntryID===entryId);
+  if (!objs.length) { hint.innerText = 'That period had no objective rows to copy.'; return; }
   document.getElementById('soRows').innerHTML = '';
   objs.forEach(o => {
     document.getElementById('soRows').insertAdjacentHTML('beforeend', soRowHtml());
@@ -313,7 +322,7 @@ function copyFromPrevious() {
     r.querySelector('.so-target').value = o.Target;
   });
   updateSoWeightTotal();
-  hint.innerText = `Copied ${objs.length} row(s) from "${last.PeriodLabel}" — Target and Actual are left as-is/blank; adjust anything that changed, then send.`;
+  hint.innerText = `Copied ${objs.length} row(s) from "${entry.PeriodLabel}" — Target and Actual are left as-is/blank; adjust anything that changed, then send.`;
 }
 async function createEntryForStaff() {
   const errEl = document.getElementById('soErr'); errEl.innerText='';
