@@ -62,7 +62,7 @@ const Api = (function () {
       { Objective:"Revenue Growth", KeyResult:"Achieve monthly sales target", Unit:"₦", Weight:50, Target:500000 },
       { Objective:"New Client Acquisition", KeyResult:"Number of new clients onboarded", Unit:"Count", Weight:30, Target:5 },
       { Objective:"Punctuality & Reporting", KeyResult:"Weekly reports submitted on time", Unit:"%", Weight:20, Target:100 }
-    ]));
+    ]));]
     return db;
   }
 
@@ -183,7 +183,7 @@ const Api = (function () {
         db.finalReviews.push({ ReviewID:newId("FR"), CycleID:body.cycleId, StaffID:cycle.StaffID, Type:cycle.Type, Decision:body.decision, Summary:body.summary||"", ImprovementPlan:body.improvementPlan||"", ReviewedDate:new Date().toISOString(), ReviewedBy:"HR" });
         const S = findStaff(db, cycle.StaffID);
         if (body.decision==="Passed") { cycle.Status="Passed"; if(S) S.Status="Active"; }
-        else if (body.decision==="Failed") { cycle.Status="Failed"; }
+        else if (body.decision==="Failed") { cycle.Status="Failed"; if (S && S.Status===cycle.Type) S.Status="Active"; }
         else if (body.decision==="Extended") {
           cycle.Status="Extended";
           if (body.extendToDate) cycle.EndDate = new Date(body.extendToDate).toISOString();
