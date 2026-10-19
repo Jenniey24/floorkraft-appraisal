@@ -11,7 +11,7 @@
   <div class="brand">Staff <span>Console</span></div>
   <div class="flex">
     <span class="who" id="whoName"></span>
-    <a class="logout" onclick="logout()">Log out</a>
+    <A class="logout" onclick="logout()">Log out</A>
   </div>
 </header>
 <div class="wrap">
@@ -35,7 +35,7 @@
   <div id="pane-suggest" class="pane hidden">
     <div class="card">
       <h2>Suggestion Box</h2>
-      <p class="muted">Tell HR what would help you (or the team) perform better — training, tools, process changes, anything.</p>
+      <P class="muted">Tell HR what would help you (or the team) perform better — training, tools, process changes, anything.</P>
       <label>Category</label>
       <select id="sugCategory">
         <option>General</option><option>Training</option><option>Tools/Equipment</option>
@@ -59,12 +59,15 @@ if (!CURRENT) window.location.href = 'index.html';
 document.getElementById('whoName').innerText = CURRENT.Name + ' · ' + CURRENT.StaffID;
 document.getElementById('demoNote').classList.toggle('hidden', !DEMO_MODE);
 function logout() { sessionStorage.clear(); window.location.href = 'index.html'; }
-function esc(s){ return String(s||'').replace(/"/g,'&quot;'); }
-function fmtDate(d) { if(!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString(); }
+// Escapes all HTML-sensitive characters so staff text can't inject HTML
+function esc(S){
+  return String(S==null?'':S).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function fmtDate(D) { if(!D) return '—'; const dt = new Date(D); return isNaN(dt) ? D : dt.toLocaleDateString(); }
 
 function showTab(name) {
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
-  document.querySelectorAll('.pane').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.tabs button').forEach(B => B.classList.toggle('active', B.dataset.tab===name));
+  document.querySelectorAll('.pane').forEach(P => P.classList.add('hidden'));
   document.getElementById('pane-'+name).classList.remove('hidden');
   if (name==='history') renderHistory();
 }
@@ -79,20 +82,20 @@ load();
 
 function statusBadge(status) {
   const cls = status==='PIP' ? 'pip' : status==='Probation' ? 'probation' : 'active';
-  return `<span class="badge ${cls}">${status}</span>`;
+  return `<span class="badge ${cls}">${esc(status)}</span>`;
 }
 
 function renderStatus() {
-  const s = DASH.staff;
-  let html = `<h2>Hello, ${esc(s.Name)} ${statusBadge(s.Status)}</h2>`;
+  const S = DASH.staff;
+  let html = `<h2>Hello, ${esc(S.Name)} ${statusBadge(S.Status)}</h2>`;
   if (DASH.cycle) {
-    const c = DASH.cycle;
-    if (c.Type === 'Probation') {
-      html += `<p class="muted">Probation started ${fmtDate(c.StartDate)} · Month ${c.CurrentPeriod} of ${c.DurationMonths} · Ends ${fmtDate(c.EndDate)}${c.Status==='Extended'?' (Extended)':''}</p>`;
-    } else if (c.Type === 'PIP') {
-      html += `<p class="muted">PIP started ${fmtDate(c.StartDate)} · Ends ${fmtDate(c.EndDate)}${c.Status==='Extended'?' (Extended)':''}${c.Reason?(' · Reason: '+esc(c.Reason)):''}</p>`;
+    const C = DASH.cycle;
+    if (C.Type === 'Probation') {
+      html += `<p class="muted">Probation started ${fmtDate(C.StartDate)} · Month ${C.CurrentPeriod} of ${C.DurationMonths} · Ends ${fmtDate(C.EndDate)}${C.Status==='Extended'?' (Extended)':''}</p>`;
+    } else if (C.Type === 'PIP') {
+      html += `<p class="muted">PIP started ${fmtDate(C.StartDate)} · Ends ${fmtDate(C.EndDate)}${C.Status==='Extended'?' (Extended)':''}${C.Reason?(' · Reason: '+esc(C.Reason)):''}</p>`;
     }
-    if (c.Notes) html += `<p class="small muted">${esc(c.Notes)}</p>`;
+    if (C.Notes) html += `<p class="small muted">${esc(C.Notes)}</p>`;
   } else {
     html += `<p class="muted">You are on the standard monthly appraisal track.</p>`;
   }
@@ -100,9 +103,9 @@ function renderStatus() {
 }
 
 function latestOpenEntry() {
-  // entry HR has built objectives for, awaiting the staff's Actuals/Comment, or already submitted-but-not-yet-signed (still viewable/editable pre-submit only)
-  const open = DASH.entries.filter(e => e.Status === 'AwaitingStaff');
-  if (open.length) return open.sort((a,b)=> (b.PeriodLabel||'').localeCompare(a.PeriodLabel||''))[0];
+  // entry HR has built objectives for, awaiting the staff's Actuals/Comment
+  const open = DASH.entries.filter(E => E.Status === 'AwaitingStaff');
+  if (open.length) return open.sort((A,B)=> (B.PeriodLabel||'').localeCompare(A.PeriodLabel||''))[0];
   return null;
 }
 
@@ -115,18 +118,18 @@ function renderCurrentEntry() {
     return;
   }
   entryCard.classList.remove('hidden');
-  const rows = entry.objectives.map(o => `
+  const rows = entry.objectives.map(O => `
     <tr>
-      <td>${esc(o.Objective)}</td>
-      <td>${esc(o.KeyResult)}</td>
-      <td>${esc(o.Unit)}</td>
-      <td>${o.Weight}%</td>
-      <td>${o.Target}</td>
-      <td><input class="cell actual" data-oid="${o.ObjectiveID}" data-target="${o.Target}" type="number" style="width:90px" placeholder="Actual"></td>
-      <td class="achv-${o.ObjectiveID} muted">—</td>
+      <td>${esc(O.Objective)}</td>
+      <td>${esc(O.KeyResult)}</td>
+      <td>${esc(O.Unit)}</td>
+      <td>${O.Weight}%</td>
+      <td>${O.Target}</td>
+      <td><input class="cell actual" data-oid="${O.ObjectiveID}" data-target="${O.Target}" type="number" style="width:90px" placeholder="Actual"></td>
+      <td class="achv-${O.ObjectiveID} muted">—</td>
     </tr>
     <tr>
-      <td colspan="7"><textarea class="comment" data-oid="${o.ObjectiveID}" placeholder="Your comment on this objective (what happened, why, context)..." style="min-height:50px;"></textarea></td>
+      <td colspan="7"><textarea class="comment" data-oid="${O.ObjectiveID}" placeholder="Your comment on this objective (what happened, why, context)..." style="min-height:50px;"></textarea></td>
     </tr>`).join('');
   entryCard.innerHTML = `
     <h2>${esc(entry.PeriodLabel)}</h2>
@@ -142,8 +145,6 @@ function renderCurrentEntry() {
 }
 
 function recalcPreview() {
-  const rows = document.querySelectorAll('#entryRows tr').length;
-  let weighted = 0;
   document.querySelectorAll('#entryRows .actual').forEach(inp => {
     const target = parseFloat(inp.dataset.target) || 0;
     const actual = parseFloat(inp.value) || 0;
@@ -151,15 +152,16 @@ function recalcPreview() {
     const cell = document.querySelector('.achv-'+inp.dataset.oid);
     if (cell) cell.innerText = inp.value ? achv + '%' : '—';
   });
-  // weight lookup from the current open entry's objectives
   const entry = latestOpenEntry();
   if (!entry) return;
-  entry.objectives.forEach(o => {
-    const inp = document.querySelector(`.actual[data-oid="${o.ObjectiveID}"]`);
+  let weighted = 0;
+  entry.objectives.forEach(O => {
+    const inp = document.querySelector(`.actual[data-oid="${O.ObjectiveID}"]`);
     if (!inp) return;
     const actual = parseFloat(inp.value) || 0;
-    const achv = o.Target ? (actual/o.Target*100) : 0;
-    weighted += achv * (parseFloat(o.Weight)||0)/100;
+    const target = parseFloat(O.Target) || 0;
+    const achv = target ? (actual/target*100) : 0;
+    weighted += achv * (parseFloat(O.Weight)||0)/100;
   });
   document.getElementById('livePreview').innerText = (Math.round(weighted*10)/10) + '%';
 }
@@ -171,7 +173,7 @@ async function submitEntry(entryId) {
     actual: inp.value,
     comment: document.querySelector(`.comment[data-oid="${inp.dataset.oid}"]`).value
   }));
-  if (actuals.some(a => a.actual === '')) {
+  if (actuals.some(A => A.actual === '')) {
     if (!confirm('Some objectives have no Actual entered — submit anyway?')) return;
   }
   const res = await Api.post('submitEntry', { entryId, staffId: CURRENT.StaffID, actuals });
@@ -194,11 +196,11 @@ function objectivesTableHtml(objs) {
 }
 function renderHistory() {
   const list = document.getElementById('historyList');
-  const done = DASH.entries.filter(E => E.Status !== 'AwaitingStaff').sort((A,B)=>(B.SubmittedDate||'').localeCompare(A.SubmittedDate||''));
+  const done = DASH.entries.filter(E => E.Status !== 'AwaitingStaff').sort((A,B)=>String(B.SubmittedDate||'').localeCompare(String(A.SubmittedDate||'')));
   if (!done.length) { list.innerHTML = '<p class="muted">No submissions yet.</p>'; return; }
   list.innerHTML = done.map(E => `
     <div class="card" style="background:#fafbfd;">
-      <div class="flex between"><h3 style="margin:0;">${esc(E.PeriodLabel)}</h3><span class="badge ${(E.Status||'').toLowerCase()}">${E.Status}</span></div>
+      <div class="flex between"><h3 style="margin:0;">${esc(E.PeriodLabel)}</h3><span class="badge ${(E.Status||'').toLowerCase()}">${esc(E.Status)}</span></div>
       <p class="small muted">Overall score: <b>${E.OverallScore}%</b></p>
       ${objectivesTableHtml(E.objectives)}
     </div>`).join('');
