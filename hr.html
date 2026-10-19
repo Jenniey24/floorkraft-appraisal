@@ -53,8 +53,11 @@
       <div class="error" id="staffErr"></div>
     </div>
     <div class="card">
-      <h2>All Staff</h2>
-      <table><thead><tr><th>ID</th><th>Name</th><th>Dept</th><th>Role</th><th>Status</th><th>Email</th><th></th></tr></thead><tbody id="staffTable"></tbody></table>
+      <div class="flex between">
+        <h2>All Staff</h2>
+        <label class="flex" style="margin:0"><input type="checkbox" id="showFormer" style="width:auto" onchange="renderStaffTable()"> Show former staff</label>
+      </div>
+      <table><thead><tr><th>ID</th><th>Name</th><th>Dept</th><th>Role</th><th>Status</th><th>Email</th><th>Reminders</th><th></th></tr></thead><tbody id="staffTable"></tbody></table>
     </div>
     <div class="card hidden" id="editStaffCard"></div>
   </div>
@@ -180,10 +183,19 @@ function showTab(name) {
   document.querySelectorAll('.pane').forEach(p => p.classList.add('hidden'));
   document.getElementById('pane-'+name).classList.remove('hidden');
 }
-function esc(s){ return String(s||'').replace(/"/g,'&quot;'); }
+// Escapes all HTML-sensitive characters (was quotes only) so staff comments can't inject HTML
+function esc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function fmtDate(d) { if(!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString(); }
 function val(id){ const el=document.getElementById(id); return el.value.trim ? el.value.trim() : el.value; }
-function statusClass(s) { s=(s||'').toLowerCase(); if(s==='pip') return 'pip'; if(s==='probation') return 'probation'; return 'active'; }
+function statusClass(s) {
+  s=(s||'').toLowerCase();
+  if(s==='pip' || s==='failed') return 'pip';
+  if(s==='probation') return 'probation';
+  if(s==='left' || s==='closed' || s==='cancelled') return 'left';
+  return 'active';
+}
 function scoreClass(s) { s=parseFloat(s); return s>=80?'score-good':s>=60?'score-warn':'score-bad'; }
 function achvStatus(achv) {
   achv = parseFloat(achv)||0;
@@ -191,10 +203,12 @@ function achvStatus(achv) {
   if (achv >= 70) return { label: 'Developing', cls: 'reviewed' };
   return { label: 'Behind Target', cls: 'pip' };
 }
+// A staff member who has left the company or been deactivated
+function isFormer(s){ return s.Active===false || String(s.Active).toLowerCase()==='false' || s.Status==='Left'; }
 function monthlyRollupHtml(cycle, entries) {
   // Sums each goal's Target/Actual across every entry in this cycle (weekly for PIP, monthly for Probation),
   // the same way the spreadsheet's master sheet rolls weekly figures into a MONTHLY column per goal.
-  const relevant = entries.filter(e => e.Status !== 'AwaitingStaff');
+  const relevant = entries.filter(e => e.Status !== 'AwaitingStaff' && e.Status !== 'Cancelled');
   if (!relevant.length) return '<p class="muted small">No submitted entries yet to roll up.</p>';
   const byGoal = {}; // key: Objective name -> { weight, target, actual, unit, keyResult }
   relevant.forEach(e => {
@@ -233,14 +247,29 @@ refresh();
 
 /* ---------------- STAFF ---------------- */
 function renderStaffTable() {
-  document.getElementById('staffTable').innerHTML = OV.staff.map(s => `<tr>
-    <td>${s.StaffID}</td><td>${esc(s.Name)}</td><td>${esc(s.Department)}</td><td>${s.Role}</td>
-    <td><span class="badge ${statusClass(s.Status)}">${s.Status}</span></td><td>${esc(s.Email)}</td>
-    <td><button class="btn secondary small" onclick="openEditStaff('${s.StaffID}')">Edit</button></td>
-  </tr>`).join('');
+  const cb = document.getElementById('showFormer');
+  const showFormer = cb && cb.checked;
+  document.getElementById('staffTable').innerHTML = OV.staff.filter(s => showFormer || !isFormer(s)).map(s => {
+    const former = isFormer(s);
+    const remindersOff = s.RemindersOff===true || String(s.RemindersOff).toLowerCase()==='true';
+    const rem = former ? '<span class="muted small">Stopped (left)</span>'
+      : remindersOff
+        ? `<span class="muted small">Cancelled</span> <button class="btn secondary small" onclick="toggleReminders('${s.StaffID}',false)">Resume</button>`
+        : `<button class="btn secondary small" onclick="toggleReminders('${s.StaffID}',true)">Cancel reminders</button>`;
+    const actions = former
+      ? `<button class="btn secondary small" onclick="reinstateStaff('${s.StaffID}')">Reinstate</button>`
+      : `<button class="btn secondary small" onclick="openEditStaff('${s.StaffID}')">Edit</button>
+         <button class="btn danger small" onclick="markLeft('${s.StaffID}')">Mark as Left</button>`;
+    return `<tr>
+      <td>${s.StaffID}</td><td>${esc(s.Name)}</td><td>${esc(s.Department)}</td><td>${s.Role}</td>
+      <td><span class="badge ${statusClass(s.Status)}">${esc(s.Status)}</span>${s.ExitReason?`<div class="muted small">${esc(s.ExitReason)}</div>`:''}</td>
+      <td>${esc(s.Email)}</td><td>${rem}</td><td><div class="flex">${actions}</div></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="muted">No staff to show.</td></tr>';
 }
 function renderStaffSelects() {
-  const opts = OV.staff.filter(s=>s.Role==='Staff').map(s => `<option value="${s.StaffID}">${esc(s.Name)} (${s.StaffID}) — ${s.Status}</option>`).join('');
+  // Only current staff appear in the dropdowns — people who have left are excluded
+  const opts = OV.staff.filter(s=>s.Role==='Staff' && !isFormer(s)).map(s => `<option value="${s.StaffID}">${esc(s.Name)} (${s.StaffID}) — ${esc(s.Status)}</option>`).join('');
   ['pStaff','ppStaff','yStaff','soStaff'].forEach(id => document.getElementById(id).innerHTML = opts);
   if (document.getElementById('soStaff').value) onSoStaffChange();
 }
@@ -266,7 +295,7 @@ function openEditStaff(staffId) {
       <div><label>Department</label><input id="eDept" value="${esc(s.Department)}"></div>
       <div><label>Job Title</label><input id="eTitle" value="${esc(s.JobTitle)}"></div>
       <div><label>Manager Email</label><input id="eMgr" value="${esc(s.ManagerEmail)}"></div>
-      <div><label>Active</label><select id="eActive"><option value="true" ${s.Active!==false?'selected':''}>Yes</option><option value="false" ${s.Active===false?'selected':''}>No</option></select></div>
+      <div><label>Active</label><select id="eActive"><option value="true" ${!isFormer(s)?'selected':''}>Yes</option><option value="false" ${isFormer(s)?'selected':''}>No</option></select></div>
     </div>
     <div class="flex" style="margin-top:10px;">
       <button class="btn" onclick="saveEditStaff('${staffId}')">Save Changes</button>
@@ -279,6 +308,26 @@ async function saveEditStaff(staffId) {
   await Api.post('updateStaff', { staffId, patch });
   document.getElementById('editStaffCard').classList.add('hidden');
   alert('Updated.'); refresh();
+}
+
+/* ---- Reminders / leaving the company ---- */
+async function toggleReminders(staffId, off) {
+  await Api.post('updateStaff', { staffId, patch: { RemindersOff: off } });
+  refresh();
+}
+async function markLeft(staffId) {
+  const reason = prompt('Reason for leaving (e.g. Resigned, Terminated, Failed probation, Contract ended):');
+  if (reason === null) return;
+  if (!confirm('This stops all reminders, closes any open Probation/PIP, and cancels pending objectives. Continue?')) return;
+  const res = await Api.post('offboardStaff', { staffId, reason });
+  if (res && res.error) { alert(res.error); return; }
+  alert('Marked as left. Reminders stopped.');
+  refresh();
+}
+async function reinstateStaff(staffId) {
+  if (!confirm('Reinstate this person as an active staff member?')) return;
+  await Api.post('updateStaff', { staffId, patch: { Active:true, Status:'Active', RemindersOff:false, ExitReason:'', ExitDate:'' } });
+  refresh();
 }
 
 /* ---------------- SET OBJECTIVES ---------------- */
@@ -306,7 +355,8 @@ function onSoYearlyToggle() {
   } else {
     onSoStaffChange();
   }
-}function onSoStaffChange() {
+}
+function onSoStaffChange() {
   const staffId = val('soStaff');
   const s = OV.staff.find(x=>x.StaffID===staffId);
   document.getElementById('soYearly').checked = false;
@@ -331,7 +381,7 @@ function onSoYearlyToggle() {
 }
 function populateCopySource(staffId) {
   const sel = document.getElementById('soCopySource');
-  const staffEntries = OV.entries.filter(e => e.StaffID === staffId).sort((a,b) => (b.SubmittedDate||b.EntryID||'').localeCompare(a.SubmittedDate||a.EntryID||''));
+  const staffEntries = OV.entries.filter(e => e.StaffID === staffId && e.Status !== 'Cancelled').sort((a,b) => String(b.SubmittedDate||b.EntryID||'').localeCompare(String(a.SubmittedDate||a.EntryID||'')));
   sel.innerHTML = '<option value="">— none, start blank —</option>' + staffEntries.map(e => {
     const count = OV.objectives.filter(o=>o.EntryID===e.EntryID).length;
     return `<option value="${e.EntryID}">${esc(e.PeriodLabel)} (${count} objective${count===1?'':'s'}, ${e.Status})</option>`;
@@ -463,7 +513,7 @@ async function commentEntry(id) {
 async function signOffEntry(id) {
   await Api.post('hrSignOffEntry', { entryId: id, hrComments: document.getElementById('cmt-'+id).value, improvementPlan: document.getElementById('imp-'+id).value });
   alert('Signed off — staff notified.');
-  refresh();
+  await refresh();
   maybeOfferAdvance(id);
 }
 async function maybeOfferAdvance(entryId) {
@@ -471,6 +521,7 @@ async function maybeOfferAdvance(entryId) {
   if (!entry || entry.Type !== 'Probation') return;
   const cycle = OV.cycles.find(c=>c.CycleID===entry.CycleID);
   if (!cycle) return;
+  if (cycle.Status !== 'Active' && cycle.Status !== 'Extended') return; // closed/failed/passed — nothing to advance
   if (confirm(`This closes out Probation Month ${cycle.CurrentPeriod} for this staff member. Move them to the next month now? (You'll set next month's objectives in "Set Objectives" right after.)`)) {
     const res = await Api.post('closePeriodAndAdvance', { cycleId: cycle.CycleID });
     if (res.needsFinalReview) {
@@ -494,14 +545,16 @@ function renderProbationList() {
   document.getElementById('probationList').innerHTML = probs.map(p => {
     const entries = OV.entries.filter(e=>e.CycleID===p.CycleID);
     const reviews = OV.finalReviews.filter(f=>f.CycleID===p.CycleID);
-    const needsFinal = p.CurrentPeriod > p.DurationMonths && (p.Status==='Active'||p.Status==='Extended');
+    const isOpen = (p.Status==='Active'||p.Status==='Extended');
+    const needsFinal = p.CurrentPeriod > p.DurationMonths && isOpen;
     return `<div class="card" style="background:#fafbfd;">
-      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(p.StaffID))}</h3><span class="badge ${statusClass(p.Status==='Active'||p.Status==='Extended'?'Probation':p.Status)}">${p.Status}</span></div>
+      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(p.StaffID))}</h3><span class="badge ${statusClass(isOpen?'Probation':p.Status)}">${esc(p.Status)}</span></div>
       <p class="small muted">Start ${fmtDate(p.StartDate)} · Month ${p.CurrentPeriod} of ${p.DurationMonths} · Ends ${fmtDate(p.EndDate)}</p>
       <p class="small">${esc(p.Notes||'')}</p>
       ${needsFinal? `<div class="note">This staff member has completed all ${p.DurationMonths} months. Record a Final Review below.</div>` : ''}
       <hr class="sep"><h4 style="margin:8px 0;">Overall Rollup Across All Months So Far</h4>
       ${monthlyRollupHtml(p, entries)}
+      ${isOpen ? `
       <div class="grid cols-3">
         <div><label>Extend duration by (months)</label><input type="number" id="pext-${p.CycleID}" placeholder="e.g. 1"></div>
         <div><label>Notes</label><input id="pnote-${p.CycleID}" value="${esc(p.Notes||'')}"></div>
@@ -515,10 +568,10 @@ function renderProbationList() {
       </div>
       <label>Summary</label><textarea id="psum-${p.CycleID}"></textarea>
       <label>Improvement Plan (if Failed/Extended)</label><textarea id="pplan-${p.CycleID}"></textarea>
-      <button class="btn gold" style="margin-top:8px;" onclick="finalizeProbation('${p.CycleID}')">Record Final Review</button>
+      <button class="btn gold" style="margin-top:8px;" onclick="finalizeProbation('${p.CycleID}')">Record Final Review</button>` : ''}
       <hr class="sep"><p class="small"><b>Monthly entries:</b> ${entries.length}</p>
       ${entries.map(e=>`<p class="small">${esc(e.PeriodLabel)} — ${e.OverallScore}% <span class="badge ${(e.Status||'').toLowerCase()}">${e.Status}</span></p>`).join('')}
-      ${reviews.map(r=>`<p class="small"><b>Final Review:</b> ${r.Decision} — ${esc(r.Summary)}</p>`).join('')}
+      ${reviews.map(r=>`<p class="small"><b>Final Review:</b> ${esc(r.Decision)} — ${esc(r.Summary)}</p>`).join('')}
     </div>`;
   }).join('') || '<p class="muted">No probation records yet.</p>';
 }
@@ -530,10 +583,20 @@ async function extendProbation(cycleId) {
   await Api.post('editCycle', { cycleId, patch });
   alert('Updated.'); refresh();
 }
+// After a Failed review, offer to mark the person as having left so reminders stop for good
+async function offerMarkLeftAfterFail(cycleId) {
+  const c = OV.cycles.find(x=>x.CycleID===cycleId) || {};
+  if (!c.StaffID) return;
+  if (confirm('Has this person left the company? Click OK to mark them as Left and stop all reminders.')) {
+    await Api.post('offboardStaff', { staffId: c.StaffID, reason: 'Failed ' + c.Type });
+  }
+}
 async function finalizeProbation(cycleId) {
   const decision = val('pdec-'+cycleId);
   await Api.post('finalizeCycle', { cycleId, decision, summary: val('psum-'+cycleId), improvementPlan: val('pplan-'+cycleId), extendToDate: val('pextdate-'+cycleId), extendMonths: val('pextm-'+cycleId) });
-  alert('Final review recorded — staff notified.'); refresh();
+  alert('Final review recorded — staff notified.');
+  if (decision === 'Failed') await offerMarkLeftAfterFail(cycleId);
+  refresh();
 }
 
 /* ---------------- PIP MGMT ---------------- */
@@ -547,17 +610,20 @@ function renderPipList() {
   const pips = OV.cycles.filter(c=>c.Type==='PIP');
   document.getElementById('pipList').innerHTML = pips.map(p => {
     const entries = OV.entries.filter(e=>e.CycleID===p.CycleID).sort((a,b)=>(b.PeriodLabel||'').localeCompare(a.PeriodLabel||''));
+    const isOpen = (p.Status==='Active'||p.Status==='Extended');
     return `<div class="card" style="background:#fafbfd;">
-      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(p.StaffID))}</h3><span class="badge pip">${p.Status}</span></div>
+      <div class="flex between"><h3 style="margin:0;">${esc(staffOf(p.StaffID))}</h3><span class="badge ${isOpen?'pip':statusClass(p.Status)}">${esc(p.Status)}</span></div>
       <p class="small muted">Start ${fmtDate(p.StartDate)} · End ${fmtDate(p.EndDate)}</p>
       <p class="small">${esc(p.Reason||'')} ${p.Notes?(' — '+esc(p.Notes)):''}</p>
+      ${isOpen ? `
       <div class="grid cols-3">
         <div><label>New End Date (extend)</label><input type="date" id="pipext-${p.CycleID}"></div>
         <div><label>Notes</label><input id="pipnote-${p.CycleID}" value="${esc(p.Notes||'')}"></div>
         <div style="align-self:end;"><button class="btn secondary small" onclick="extendPip('${p.CycleID}')">Save Extension/Notes</button></div>
-      </div>
-      <hr class="sep"><h4 style="margin:8px 0;">Monthly Rollup (auto-calculated from her weekly entries)</h4>
+      </div>` : ''}
+      <hr class="sep"><h4 style="margin:8px 0;">Monthly Rollup (auto-calculated from weekly entries)</h4>
       ${monthlyRollupHtml(p, entries)}
+      ${isOpen ? `
       <hr class="sep"><h4 style="margin:8px 0;">Final Review</h4>
       <div class="grid cols-3">
         <div><label>Decision</label><select id="pipdec-${p.CycleID}"><option>Passed</option><option>Failed</option><option>Extended</option></select></div>
@@ -565,7 +631,7 @@ function renderPipList() {
       </div>
       <label>Summary</label><textarea id="pipsum-${p.CycleID}"></textarea>
       <label>Improvement Plan (if Failed/Extended)</label><textarea id="pipplan-${p.CycleID}"></textarea>
-      <button class="btn gold" style="margin-top:8px;" onclick="finalizePip('${p.CycleID}')">Record Final Review</button>
+      <button class="btn gold" style="margin-top:8px;" onclick="finalizePip('${p.CycleID}')">Record Final Review</button>` : ''}
       <hr class="sep">
       <p class="small"><b>Weekly entries (click to correct a previous submission):</b></p>
       ${entries.map(e=>{
@@ -588,7 +654,9 @@ async function extendPip(cycleId) {
 async function finalizePip(cycleId) {
   const decision = val('pipdec-'+cycleId);
   await Api.post('finalizeCycle', { cycleId, decision, summary: val('pipsum-'+cycleId), improvementPlan: val('pipplan-'+cycleId), extendToDate: val('pipextdate-'+cycleId) });
-  alert('Final review recorded — staff notified.'); refresh();
+  alert('Final review recorded — staff notified.');
+  if (decision === 'Failed') await offerMarkLeftAfterFail(cycleId);
+  refresh();
 }
 
 /* ---------------- YEARLY & BEST PERFORMER ---------------- */
