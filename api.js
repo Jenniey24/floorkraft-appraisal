@@ -7,8 +7,8 @@
 const Api = (function () {
 
   async function realGet(action, params) {
-    const q = new URLSearchParams(Object.assign({ action }, params || {}));
-    const res = await fetch(APPS_SCRIPT_URL + "?" + q.toString());
+    const Q = new URLSearchParams(Object.assign({ action }, params || {}));
+    const res = await fetch(APPS_SCRIPT_URL + "?" + Q.toString());
     return res.json();
   }
   async function realPost(action, body) {
@@ -25,7 +25,7 @@ const Api = (function () {
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
   function seedObjectives(entryId, list) {
-    return list.map((o,idx) => Object.assign({ ObjectiveID: idx0(entryId,idx), EntryID: entryId, Actual:"", Achv:"", EmployeeComment:"", SortOrder: idx }, o));
+    return list.map((O,idx) => Object.assign({ ObjectiveID: idx0(entryId,idx), EntryID: entryId, Actual:"", Achv:"", EmployeeComment:"", SortOrder: idx }, O));
   }
   function idx0(entryId, idx) { return entryId + "-O" + idx; }
 
@@ -73,26 +73,26 @@ const Api = (function () {
   }
   function saveDb(db) { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
   function newId(prefix) { return prefix + "-" + Date.now() + Math.floor(Math.random()*90+10); }
-  function findStaff(db, id) { return db.staff.find(s => s.StaffID === id); }
+  function findStaff(db, id) { return db.staff.find(S => S.StaffID === id); }
   function computeAchv(target, actual) { target=parseFloat(target)||0; actual=parseFloat(actual)||0; if(target===0) return 0; return Math.round((actual/target*100)*10)/10; }
-  function computeOverall(objs) { let w=0; objs.forEach(o=>{ w += (parseFloat(o.Achv)||0)*(parseFloat(o.Weight)||0)/100; }); return Math.round(w*10)/10; }
+  function computeOverall(objs) { let W=0; objs.forEach(O=>{ W += (parseFloat(O.Achv)||0)*(parseFloat(O.Weight)||0)/100; }); return Math.round(W*10)/10; }
 
   async function demoHandle(action, params) {
     const db = loadDb();
     switch (action) {
       case "login": {
-        const s = db.staff.find(x => x.StaffID === params.staffId && x.PIN === params.pin);
-        if (!s) return { error: "Invalid ID or PIN" };
-        const c = Object.assign({}, s); delete c.PIN; return { staff: c };
+        const S = db.staff.find(X => X.StaffID === params.staffId && X.PIN === params.pin);
+        if (!S) return { error: "Invalid ID or PIN" };
+        const C = Object.assign({}, S); delete C.PIN; return { staff: C };
       }
       case "hrPinCheck": return { ok: params.pin === db.config.HR_CONSOLE_PIN };
-      case "staffList": return db.staff.map(s => { const c=Object.assign({},s); delete c.PIN; return c; });
-      case "config": { const c=Object.assign({},db.config); delete c.HR_CONSOLE_PIN; return c; }
+      case "staffList": return db.staff.map(S => { const C=Object.assign({},S); delete C.PIN; return C; });
+      case "config": { const C=Object.assign({},db.config); delete C.HR_CONSOLE_PIN; return C; }
       case "staffDashboard": {
         const staff = Object.assign({}, findStaff(db, params.staffId)); delete staff.PIN;
-        const cycle = db.cycles.find(c => c.StaffID === params.staffId && (c.Status==='Active'||c.Status==='Extended')) || null;
-        const entries = db.entries.filter(e => e.StaffID === params.staffId).map(e => Object.assign({}, e, { objectives: db.objectives.filter(o=>o.EntryID===e.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder) }));
-        const finalReviews = db.finalReviews.filter(f => f.StaffID === params.staffId);
+        const cycle = db.cycles.find(C => C.StaffID === params.staffId && (C.Status==='Active'||C.Status==='Extended')) || null;
+        const entries = db.entries.filter(E => E.StaffID === params.staffId).map(E => Object.assign({}, E, { objectives: db.objectives.filter(O=>O.EntryID===E.EntryID).sort((A,B)=>A.SortOrder-B.SortOrder) }));
+        const finalReviews = db.finalReviews.filter(F => F.StaffID === params.staffId);
         return { staff, cycle, entries, finalReviews };
       }
       case "hrOverview": return db;
@@ -108,8 +108,8 @@ const Api = (function () {
         db.staff.push({ StaffID:id, Name:body.name, Email:body.email, Department:body.department, JobTitle:body.jobTitle, Role:body.role||"Staff", PIN:body.pin||"0000", JoinDate:body.joinDate||new Date().toISOString(), Status:body.status||"Active", ManagerEmail:body.managerEmail||"", Active:true });
         saveDb(db);
         if ((body.status||"Active")==="Probation") {
-          const r = await demoHandlePost("startCycle", { staffId:id, type:"Probation", startDate: body.joinDate, durationMonths:3, silent:true });
-          return { ok:true, staffId:id, cycleId:r.cycleId, demoNote:"Demo mode: no real email sent." };
+          const R = await demoHandlePost("startCycle", { staffId:id, type:"Probation", startDate: body.joinDate, durationMonths:3, silent:true });
+          return { ok:true, staffId:id, cycleId:R.cycleId, demoNote:"Demo mode: no real email sent." };
         }
         return { ok:true, staffId:id, demoNote:"Demo mode: no real email sent." };
       }
@@ -122,64 +122,64 @@ const Api = (function () {
         let end = body.endDate ? new Date(body.endDate) : new Date(start);
         if (!body.endDate) { if (type==="Probation") end.setMonth(end.getMonth()+duration); else end.setDate(end.getDate()+28); }
         db.cycles.push({ CycleID:id, StaffID:body.staffId, Type:type, StartDate:start.toISOString(), EndDate:end.toISOString(), OriginalEndDate:end.toISOString(), DurationMonths:duration, CurrentPeriod:1, Status:"Active", Reason:body.reason||"", Notes:body.notes||"" });
-        const s = findStaff(db, body.staffId); if (s) s.Status = type;
+        const S = findStaff(db, body.staffId); if (S) S.Status = type;
         saveDb(db);
         return { ok:true, cycleId:id, demoNote: body.silent? undefined : "Demo mode: staff would be emailed now." };
       }
       case "editCycle": {
-        const rec = db.cycles.find(c=>c.CycleID===body.cycleId); Object.assign(rec, body.patch); saveDb(db); return { ok:true };
+        const rec = db.cycles.find(C=>C.CycleID===body.cycleId); Object.assign(rec, body.patch); saveDb(db); return { ok:true };
       }
       case "createEntry": {
         const entryId = newId("ENT");
         db.entries.push({ EntryID:entryId, CycleID:body.cycleId||"", StaffID:body.staffId, Type:body.type, PeriodLabel:body.periodLabel, PeriodStart:body.periodStart||"", PeriodEnd:body.periodEnd||"", Status:"AwaitingStaff", OverallScore:"", SubmittedDate:"", CommentedDate:"", SignedDate:"" });
-        (body.objectives||[]).forEach((o,idx)=>{
-          db.objectives.push({ ObjectiveID:newId("OBJ"), EntryID:entryId, Objective:o.objective, KeyResult:o.keyResult, Unit:o.unit, Weight:o.weight, Target:o.target, Actual:"", Achv:"", EmployeeComment:"", SortOrder:idx });
+        (body.objectives||[]).forEach((O,idx)=>{
+          db.objectives.push({ ObjectiveID:newId("OBJ"), EntryID:entryId, Objective:O.objective, KeyResult:O.keyResult, Unit:O.unit, Weight:O.weight, Target:O.target, Actual:"", Achv:"", EmployeeComment:"", SortOrder:idx });
         });
         saveDb(db);
         return { ok:true, entryId, demoNote:"Demo mode: staff would be emailed that objectives are ready." };
       }
       case "updateObjectiveTargets": {
-        const obj = db.objectives.find(o=>o.ObjectiveID===body.objectiveId); Object.assign(obj, body.patch); saveDb(db); return { ok:true };
+        const obj = db.objectives.find(O=>O.ObjectiveID===body.objectiveId); Object.assign(obj, body.patch); saveDb(db); return { ok:true };
       }
       case "deleteObjective": {
-        db.objectives = db.objectives.filter(o=>o.ObjectiveID!==body.objectiveId); saveDb(db); return { ok:true };
+        db.objectives = db.objectives.filter(O=>O.ObjectiveID!==body.objectiveId); saveDb(db); return { ok:true };
       }
       case "submitEntry": {
-        const objs = db.objectives.filter(o=>o.EntryID===body.entryId);
-        (body.actuals||[]).forEach(a=>{
-          const obj = objs.find(o=>o.ObjectiveID===a.objectiveId); if(!obj) return;
-          obj.Actual = a.actual; obj.Achv = computeAchv(obj.Target, a.actual); obj.EmployeeComment = a.comment||"";
+        const objs = db.objectives.filter(O=>O.EntryID===body.entryId);
+        (body.actuals||[]).forEach(A=>{
+          const obj = objs.find(O=>O.ObjectiveID===A.objectiveId); if(!obj) return;
+          obj.Actual = A.actual; obj.Achv = computeAchv(obj.Target, A.actual); obj.EmployeeComment = A.comment||"";
         });
         const overall = computeOverall(objs);
-        const entry = db.entries.find(e=>e.EntryID===body.entryId);
+        const entry = db.entries.find(E=>E.EntryID===body.entryId);
         entry.Status="Submitted"; entry.OverallScore=overall; entry.SubmittedDate=new Date().toISOString();
         saveDb(db);
         return { ok:true, overallScore: overall, demoNote:"Demo mode: HR would be notified by email." };
       }
       case "hrCommentEntry": {
-        const entry = db.entries.find(e=>e.EntryID===body.entryId); entry.Status="Reviewed"; entry.CommentedDate=new Date().toISOString();
+        const entry = db.entries.find(E=>E.EntryID===body.entryId); entry.Status="Reviewed"; entry.CommentedDate=new Date().toISOString();
         entry._hrComments = body.hrComments; entry._improvementPlan = body.improvementPlan;
         saveDb(db); return { ok:true, demoNote:"Demo mode: staff would receive an email with their result now." };
       }
       case "hrSignOffEntry": {
         if (body.hrComments || body.improvementPlan) await demoHandlePost("hrCommentEntry", body);
-        const entry = db.entries.find(e=>e.EntryID===body.entryId); entry.Status="Signed"; entry.SignedDate=new Date().toISOString();
+        const entry = db.entries.find(E=>E.EntryID===body.entryId); entry.Status="Signed"; entry.SignedDate=new Date().toISOString();
         saveDb(db); return { ok:true, demoNote:"Demo mode: staff would receive the signed-off result + improvement plan now." };
       }
       case "closePeriodAndAdvance": {
-        const cycle = db.cycles.find(c=>c.CycleID===body.cycleId);
+        const cycle = db.cycles.find(C=>C.CycleID===body.cycleId);
         if (cycle.Type!=='Probation') return { error:"Only Probation auto-advances months." };
         const nextPeriod = cycle.CurrentPeriod+1; const duration = cycle.DurationMonths||3;
         cycle.CurrentPeriod = nextPeriod; saveDb(db);
         if (nextPeriod > duration) return { ok:true, needsFinalReview:true, nextPeriod };
         if (body.nextObjectives && body.nextObjectives.length) {
-          const r = await demoHandlePost("createEntry", { staffId:cycle.StaffID, type:"Probation", cycleId:body.cycleId, periodLabel:`Probation Month ${nextPeriod}`, objectives: body.nextObjectives });
-          return { ok:true, nextPeriod, entryId:r.entryId };
+          const R = await demoHandlePost("createEntry", { staffId:cycle.StaffID, type:"Probation", cycleId:body.cycleId, periodLabel:`Probation Month ${nextPeriod}`, objectives: body.nextObjectives });
+          return { ok:true, nextPeriod, entryId:R.entryId };
         }
         return { ok:true, nextPeriod, needsObjectives:true };
       }
       case "finalizeCycle": {
-        const cycle = db.cycles.find(c=>c.CycleID===body.cycleId);
+        const cycle = db.cycles.find(C=>C.CycleID===body.cycleId);
         db.finalReviews.push({ ReviewID:newId("FR"), CycleID:body.cycleId, StaffID:cycle.StaffID, Type:cycle.Type, Decision:body.decision, Summary:body.summary||"", ImprovementPlan:body.improvementPlan||"", ReviewedDate:new Date().toISOString(), ReviewedBy:"HR" });
         const S = findStaff(db, cycle.StaffID);
         if (body.decision==="Passed") { cycle.Status="Passed"; if(S) S.Status="Active"; }
@@ -193,6 +193,14 @@ const Api = (function () {
         saveDb(db);
         return { ok:true, demoNote:"Demo mode: staff would be emailed the final decision now." };
       }
+        case "offboardStaff": {
+  const S = findStaff(db, body.staffId); if (!S) return { error:"Staff not found" };
+  S.Active = false; S.Status = "Left"; S.RemindersOff = true;
+  S.ExitReason = body.reason || ""; S.ExitDate = new Date().toISOString();
+  db.cycles.forEach(C => { if (C.StaffID===S.StaffID && (C.Status==="Active"||C.Status==="Extended")) C.Status = "Closed"; });
+  db.entries.forEach(E => { if (E.StaffID===S.StaffID && E.Status==="AwaitingStaff") E.Status = "Cancelled"; });
+  saveDb(db); return { ok:true };
+}
       case "addSuggestion": {
         db.suggestions.push({ ID:newId("SUG"), StaffID: body.anonymous?"Anonymous":body.staffId, StaffName: body.anonymous?"Anonymous":body.staffName, Text:body.text, Category:body.category||"General", Date:new Date().toISOString() });
         saveDb(db); return { ok:true };
