@@ -183,7 +183,7 @@ function showTab(name) {
   document.querySelectorAll('.pane').forEach(p => p.classList.add('hidden'));
   document.getElementById('pane-'+name).classList.remove('hidden');
 }
-// Escapes all HTML-sensitive characters (was quotes only) so staff comments can't inject HTML
+// Escapes all HTML-sensitive characters so staff comments can't inject HTML
 function esc(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
@@ -237,6 +237,7 @@ function monthlyRollupHtml(cycle, entries) {
 let OV = null;
 async function refresh() {
   OV = await Api.get('hrOverview');
+  OV.config = OV.config || {};
   renderStaffTable(); renderStaffSelects(); renderInbox(); renderAwaitingList();
   renderProbationList(); renderPipList(); renderYearlyTable(); renderSuggestions();
   document.getElementById('cfgCompany').value = OV.config.COMPANY_NAME||'';
@@ -626,18 +627,18 @@ function renderPipList() {
       ${isOpen ? `
       <hr class="sep"><h4 style="margin:8px 0;">Final Review</h4>
       <div class="grid cols-3">
-        <div><label>Decision</label><select id="pipdec-${p.CycleID}"><option>Passed</option><option>Failed</option><option>Extended</option></select></div>
-        <div><label>Extend to date (if Extended)</label><input type="date" id="pipextdate-${p.CycleID}"></div>
+        <div><label>Decision</label><select id="pipdec-${P.CycleID}"><option>Passed</option><option>Failed</option><option>Extended</option></select></div>
+        <div><label>Extend to date (if Extended)</label><input type="date" id="pipextdate-${P.CycleID}"></div>
       </div>
-      <label>Summary</label><textarea id="pipsum-${p.CycleID}"></textarea>
-      <label>Improvement Plan (if Failed/Extended)</label><textarea id="pipplan-${p.CycleID}"></textarea>
-      <button class="btn gold" style="margin-top:8px;" onclick="finalizePip('${p.CycleID}')">Record Final Review</button>` : ''}
+      <label>Summary</label><textarea id="pipsum-${P.CycleID}"></textarea>
+      <label>Improvement Plan (if Failed/Extended)</label><textarea id="pipplan-${P.CycleID}"></textarea>
+      <button class="btn gold" style="margin-top:8px;" onclick="finalizePip('${P.CycleID}')">Record Final Review</button>` : ''}
       <hr class="sep">
       <p class="small"><b>Weekly entries (click to correct a previous submission):</b></p>
-      ${entries.map(e=>{
-        const objs = OV.objectives.filter(o=>o.EntryID===e.EntryID).sort((a,b)=>a.SortOrder-b.SortOrder);
+      ${entries.map(E=>{
+        const objs = OV.objectives.filter(O=>O.EntryID===E.EntryID).sort((A,B)=>A.SortOrder-B.SortOrder);
         return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
-          <div class="flex between"><b class="small">${esc(e.PeriodLabel)}</b><span class="badge ${(e.Status||'').toLowerCase()}">${e.Status}</span></div>
+          <div class="flex between"><b class="small">${esc(E.PeriodLabel)}</b><span class="badge ${(E.Status||'').toLowerCase()}">${E.Status}</span></div>
           ${objectivesTableHtml(objs, true)}
         </div>`;
       }).join('') || '<p class="muted small">No entries yet.</p>'}
@@ -663,7 +664,8 @@ async function finalizePip(cycleId) {
 function renderYearlyTable() {
   document.getElementById('yearlyTable').innerHTML = (OV.yearly||[]).map(Y => {
     const staffOf = (OV.staff.find(S=>S.StaffID===Y.StaffID)||{}).Name || Y.StaffID;
-    return `<tr><td>${esc(staffOf)}</td><td>${Y.Year}</td><td>${esc(Y.Department)}</td><td>${Y.Score}%</td><td>${Y.Eligible? 'Yes':'No'}</td></tr>`;
+    const elig = (Y.Eligible===true || String(Y.Eligible).toLowerCase()==='true');
+    return `<tr><td>${esc(staffOf)}</td><td>${Y.Year}</td><td>${esc(Y.Department)}</td><td>${Y.Score}%</td><td>${elig? 'Yes':'No'}</td></tr>`;
   }).join('') || '<tr><td colspan="5" class="muted">No records yet.</td></tr>';
 }
 async function saveYearly() {
